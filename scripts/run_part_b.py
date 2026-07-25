@@ -135,22 +135,48 @@ def drawdown_figure(funds: dict, fund_name: str = "Combined Max-Sharpe"):
 
 
 def weights_over_time_figure(funds: dict, fund_name: str = "Equity Min-Variance", top_n: int = 8):
+    # A min-variance fund over 50 names diversifies hard: the top-8 tickers by
+    # average weight are typically a small slice of the book, so stacking them
+    # under an "Other" band showing everyone else buries them under one huge,
+    # undifferentiated block. Dropping the stack and plotting each top holding
+    # as its own line shows what's actually going on (initial concentration
+    # that fades as the fund diversifies) instead of hiding it under "Other".
+    surface, ink_primary, ink_secondary, ink_muted = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
+    gridline, baseline = "#e1e0d9", "#c3c2b7"
+    categorical = ["#2a78d6", "#1baf7a", "#eda100", "#008300",
+                   "#4a3aa7", "#e34948", "#e87ba4", "#eb6834"]
+
     w = funds[fund_name]["weights"]
     avg_w = w.mean().sort_values(ascending=False)
     top_tickers = avg_w.head(top_n).index
-    other = w.drop(columns=top_tickers).sum(axis=1)
-    plot_df = w[top_tickers].copy()
-    plot_df["Other"] = other
+    other_share = w.drop(columns=top_tickers).sum(axis=1).mean()
 
-    fig, ax = plt.subplots(figsize=(9, 5))
-    ax.stackplot(plot_df.index, plot_df.T.values, labels=plot_df.columns)
-    ax.set_title(f"Portfolio weights over time - {fund_name} fund (top {top_n} holdings)")
-    ax.set_xlabel("Rebalance date")
-    ax.set_ylabel("Weight")
-    ax.set_ylim(0, 1)
-    ax.legend(fontsize=7, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.15))
-    fig.tight_layout()
-    fig.savefig(RESULTS / "figures" / "weights_over_time.png", dpi=150)
+    fig, ax = plt.subplots(figsize=(9, 5.4))
+    fig.patch.set_facecolor(surface)
+    fig.subplots_adjust(top=0.82, bottom=0.12, left=0.09, right=0.98)
+
+    for color, ticker in zip(categorical, top_tickers):
+        ax.plot(w.index, w[ticker].values * 100, color=color, linewidth=2, label=ticker)
+
+    ax.set_facecolor(surface)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    for spine in ("left", "bottom"):
+        ax.spines[spine].set_color(baseline)
+    ax.grid(axis="y", color=gridline, linewidth=0.8, zorder=0)
+    ax.set_axisbelow(True)
+    ax.tick_params(colors=ink_muted, labelsize=8)
+    ax.set_xlabel("Rebalance date", color=ink_secondary, fontsize=9)
+    ax.set_ylabel("Weight (%)", color=ink_secondary, fontsize=9)
+    ax.legend(loc="upper right", frameon=False, fontsize=8.5, labelcolor=ink_secondary, ncol=2)
+
+    fig.text(0.09, 0.96, f"Portfolio weights over time - {fund_name} fund", color=ink_primary,
+              fontsize=13, ha="left", va="top")
+    fig.text(0.09, 0.915, f"Top {top_n} holdings by average weight (the remaining "
+                          f"{w.shape[1] - top_n} names average {other_share*100:.0f}% combined)",
+              color=ink_secondary, fontsize=9, ha="left", va="top")
+
+    fig.savefig(RESULTS / "figures" / "weights_over_time.png", dpi=150, facecolor=surface)
     plt.close(fig)
 
 

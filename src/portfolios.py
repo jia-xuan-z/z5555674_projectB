@@ -21,12 +21,27 @@ def long_to_wide(returns: pd.DataFrame) -> pd.DataFrame:
     return returns.pivot(index="date", columns="ticker", values="ret").sort_index()
 
 
+# Daily-return covariances are tiny (~1e-4), and scipy's SLSQP default ftol
+# (1e-6) is an ABSOLUTE function-value tolerance - against an objective this
+# small, the solver can decide it has "converged" after 1 iteration without
+# moving away from the equal-weight starting point at all, while still
+# reporting success=True. Confirmed empirically: without this scaling, the
+# equity min-variance fund silently returned equal weight (1/50 exactly) at
+# 31 of 36 rebalances, and risk parity did so at every single rebalance
+# across all three universes - the brief warns about exactly this failure
+# mode. Multiplying the objective by a constant does not change the argmin,
+# so this only fixes the solver's numerics, not the optimisation problem.
+_OBJECTIVE_SCALE = 1e4
+_SOLVER_OPTIONS = {"ftol": 1e-14, "maxiter": 500}
+
+
 def _min_variance_weights(mean: np.ndarray, cov: np.ndarray) -> tuple[np.ndarray, bool]:
     n = cov.shape[0]
     w0 = np.repeat(1 / n, n)
     bounds = [(0.0, 1.0)] * n
     cons = ({"type": "eq", "fun": lambda w: w.sum() - 1},)
-    res = minimize(lambda w: w @ cov @ w, w0, method="SLSQP", bounds=bounds, constraints=cons)
+    res = minimize(lambda w: _OBJECTIVE_SCALE * (w @ cov @ w), w0, method="SLSQP",
+                    bounds=bounds, constraints=cons, options=_SOLVER_OPTIONS)
     return (res.x if res.success else w0), res.success
 
 
@@ -41,7 +56,11 @@ def _max_sharpe_weights(mean: np.ndarray, cov: np.ndarray, rf: float = 0.0) -> t
         port_vol = np.sqrt(w @ cov @ w)
         return -port_ret / port_vol if port_vol > 1e-12 else 0.0
 
-    res = minimize(neg_sharpe, w0, method="SLSQP", bounds=bounds, constraints=cons)
+    # Not empirically affected by the scaling issue above (the Sharpe ratio
+    # is already an O(1) quantity, not an O(1e-4) one), but the tighter
+    # tolerance is free insurance against the same failure mode.
+    res = minimize(neg_sharpe, w0, method="SLSQP", bounds=bounds, constraints=cons,
+                    options=_SOLVER_OPTIONS)
     return (res.x if res.success else w0), res.success
 
 
@@ -51,13 +70,16 @@ def _risk_parity_weights(mean: np.ndarray, cov: np.ndarray) -> tuple[np.ndarray,
     bounds = [(1e-6, 1.0)] * n
     cons = ({"type": "eq", "fun": lambda w: w.sum() - 1},)
 
+    cov_scaled = cov * _OBJECTIVE_SCALE
+
     def objective(w):
-        port_var = w @ cov @ w
-        risk_contrib = w * (cov @ w)
+        port_var = w @ cov_scaled @ w
+        risk_contrib = w * (cov_scaled @ w)
         target = port_var / n
         return np.sum((risk_contrib - target) ** 2)
 
-    res = minimize(objective, w0, method="SLSQP", bounds=bounds, constraints=cons)
+    res = minimize(objective, w0, method="SLSQP", bounds=bounds, constraints=cons,
+                    options=_SOLVER_OPTIONS)
     return (res.x if res.success else w0), res.success
 
 
