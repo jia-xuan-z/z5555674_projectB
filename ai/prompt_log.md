@@ -169,14 +169,11 @@ comparison. I wanted a version that actually shows whether the tilt did
 anything.
 
 ## Prompt(s)
-- "你能不能改改这张图的visualization，感觉观感很不好" - the chart's
-  visualization felt bad, asked for a redesign.
-- Pasted a zoomed-in screenshot of the two lines stuck together and asked:
-  "能不能改一下他们两个各自的粗细让这个区别看起来更明显一点" - can you
-  adjust each line's thickness so the difference between them is more
-  visible.
-- "不行我还是不满意，蓝色的现在太粗了都看不出来变化了，这个图有没有别的
-  呈现方式。一定要用这种折线图吗" - still not happy, the thickened blue
+- can you change the visualization，of this figure - the chart's
+  visualization felt bad, redesign it.
+- can you adjust each line's thickness so the difference between them is more
+ visible.
+- still not happy, the thickened blue
   line now hides the change entirely; is there a different way to present
   this, does it have to be this kind of line chart.
 
@@ -213,3 +210,45 @@ honest picture of the result: the fusion is essentially neutral (Sharpe
 0.59 -> 0.58, a few basis points either way through 2021 and reversing
 after mid-2022), and the redesigned figure shows that plainly instead of
 implying a visual difference that isn't really there.
+
+---
+
+# Prompt log - redesigning the sentiment index figure
+
+## What I wanted
+Fix the sector_sentiment_index chart, which had the opposite problem from
+the fusion chart: instead of two lines fighting for the same space, it had
+all 10 sectors overlaid on one axis in 10 different colours - a rainbow
+"spaghetti" chart where no single sector's line could actually be traced,
+and the legend took up a quarter of the plot.
+
+## Prompt(s)
+- Pasted the original 10-line chart and asked: "这张图的观感也很差，你能不
+  能改进一下" - this chart also looks bad, can you improve it.
+
+## What the assistant produced
+Rebuilt the figure as small multiples: a 2x5 grid, one panel per sector,
+each a single thin blue line on its own axes, all sharing the same y-scale
+so magnitudes stay comparable across panels, plus a shared title/subtitle
+above the grid instead of a per-panel title fighting a legend.
+
+## What was wrong or risky
+This is the same underlying mistake as the fusion chart, just the opposite
+failure mode: too many categorical series crammed onto one axis instead of
+two series crammed too close together. Both come from defaulting to "one
+line chart with everything on it" instead of asking what chart form the
+number of series and the size of the differences actually support. I
+should check the other multi-series figures (growth_of_dollar.png, which
+overlays all 9 base funds) for the same issue before treating Part B's
+figures as finished, rather than waiting for each one to be flagged
+individually.
+
+## What I changed and why
+Small multiples instead of one shared axis - the standard fix once a
+categorical chart passes about 6-8 series (this skill/style guide's own
+rule of thumb). Re-ran the full pipeline and visually confirmed each
+sector's line is now legible on its own, and the shared y-scale still
+lets me compare sectors like RealEstate/Utilities (sparser news, per
+DATA_GUIDE.md, and visibly spikier here) against steadier ones like Comm
+or Consumer - a pattern the original overlapping chart didn't surface at
+all.
