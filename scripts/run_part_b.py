@@ -221,10 +221,15 @@ def fusion_comparison(funds: dict, fused_name: str, perf_table: pd.DataFrame):
                                                  "top": 0.85, "bottom": 0.09, "left": 0.1, "right": 0.97})
     fig.patch.set_facecolor(SURFACE)
 
-    ax1.plot(base_growth.index, base_growth.values, color=BLUE, linewidth=2,
-              label=FUSION_BASE_FUND, zorder=3)
-    ax1.plot(fused_growth.index, fused_growth.values, color=ORANGE, linewidth=2, linestyle="--",
-              label=fused_name, zorder=3)
+    # The two series are within a few cents of each other almost everywhere, so
+    # equal-weight lines just merge into one blob. Instead: a thick, pale line
+    # for the base fund sits BEHIND a thin, crisp dashed line for the fused
+    # fund - wherever they diverge, the pale line pokes out as a visible edge
+    # rather than the two strokes fighting for the same pixels.
+    ax1.plot(base_growth.index, base_growth.values, color=BLUE, linewidth=3.2,
+              alpha=0.45, solid_capstyle="round", label=FUSION_BASE_FUND, zorder=2)
+    ax1.plot(fused_growth.index, fused_growth.values, color=ORANGE, linewidth=1.3,
+              linestyle=(0, (4, 2)), label=fused_name, zorder=3)
     _style_axis(ax1)
     ax1.set_ylabel("Growth of $1", color=INK_SECONDARY, fontsize=9)
     fig.text(0.1, 0.97, "Sentiment fusion: does tilting toward positive sentiment change the fund?",
