@@ -271,20 +271,32 @@ palette, so each holding's own weight trajectory is legible instead of
 being squeezed into a thin band under one dominant block.
 
 ## What was wrong or risky
-Nothing wrong with the redesign itself, but re-running it to check the
-output surfaced a separate, serious problem in the underlying data (all 8
-lines flatlining at exactly equal weight from mid-2021 onward) - see the
-next log entry ("investigating and fixing the silent optimiser stall") for
+Re-running the line-per-ticker version to check the output surfaced a
+separate, serious problem in the underlying data first (all 8 lines
+flatlining at exactly equal weight from mid-2021 onward) - see the next
+log entry ("investigating and fixing a silent SLSQP optimiser stall") for
 that investigation, since it turned into a real correctness bug fix rather
-than a visualisation task and is worth keeping separate.
+than a visualisation task and is worth keeping separate. After that fix,
+the regenerated line chart had its own, purely visual problems: with 8
+lines sharing one axis, the in-plot legend sat on top of some lines' peaks
+(WMT/KO around the top of the chart), and two of the 8 categorical colours
+- GILD (red) and T (orange) - were close enough to be hard to tell apart
+right where lines crossed. Both were flagged directly against a screenshot
+rather than found by me.
 
 ## What I changed and why
-Chart form only at this stage: small multiples were the fix for the
-sentiment chart's too-many-series problem; here the fix for the opposite
-problem (one dominant category burying the rest) was to drop the "Other"
-bucket entirely and let the 8 holdings of interest use the full vertical
-scale as plain lines. The figure was re-generated again after the
-optimiser fix below, since the underlying weights changed.
+Two rounds of chart-form changes. First: dropped the "Other" bucket
+entirely and let the 8 holdings of interest use the full vertical scale as
+plain lines, instead of stacking them under one dominant undifferentiated
+block (the opposite problem from the sentiment chart's too-many-series
+issue). Second, once that version's legend-overlap and colour-adjacency
+problems were flagged: replaced the shared-axis line chart with the same
+small-multiples treatment already used for the sentiment index - a 2x4
+grid, one panel per top-8 ticker, sharing one y-scale for comparability.
+Small multiples remove both remaining complaints at once: no legend
+competing for plot area (each panel is titled with its own ticker instead),
+and no colour-adjacency confusion (every panel uses the same single colour,
+so no two tickers are ever competing for the same hue at a crossing point).
 
 ---
 
@@ -301,7 +313,7 @@ The brief mentions that ‘optimizers on tiny daily-return covariances can silen
 ## What the assistant produced
 Code level:
 src/portfolios.py — the three functions _min_variance_weights, _risk_parity_weights, and _max_sharpe_weights all got two changes: scaling the objective function up by a factor of 10,000 (_OBJECTIVE_SCALE = 1e4) and tightening ftol to 1e-14, so scipy's SLSQP solver no longer thinks it has "converged" just because the raw objective values were too small to register a meaningful change.
-Data level:66
+Data level:
 results/tables/performance_metrics.csv — all 9 funds' return/volatility/Sharpe/drawdown numbers recomputed using the genuinely optimised weights
 results/data/fund_returns.csv, fund_weights.csv — the underlying daily returns and weights fully recalculated
 Every figure under results/figures/ tied to these funds (weights_over_time, growth_of_dollar, drawdown, sharpe_barplot, fusion_comparison) redrawn from the corrected data
