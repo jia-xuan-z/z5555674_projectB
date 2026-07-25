@@ -184,23 +184,71 @@ def sentiment_index_figure(sector_index: pd.DataFrame):
     plt.close(fig)
 
 
+SURFACE = "#fcfcfb"
+INK_PRIMARY = "#0b0b0b"
+INK_SECONDARY = "#52514e"
+INK_MUTED = "#898781"
+GRIDLINE = "#e1e0d9"
+BASELINE = "#c3c2b7"
+BLUE = "#2a78d6"
+ORANGE = "#eb6834"
+RED = "#e34948"
+
+
+def _style_axis(ax):
+    ax.set_facecolor(SURFACE)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    for spine in ("left", "bottom"):
+        ax.spines[spine].set_color(BASELINE)
+    ax.tick_params(colors=INK_MUTED, labelsize=8)
+    ax.grid(axis="y", color=GRIDLINE, linewidth=0.8, zorder=0)
+    ax.set_axisbelow(True)
+
+
 def fusion_comparison(funds: dict, fused_name: str, perf_table: pd.DataFrame):
     base = perf_table.loc[perf_table["fund"] == FUSION_BASE_FUND].iloc[0]
     fused = perf_table.loc[perf_table["fund"] == fused_name].iloc[0]
     comparison = pd.DataFrame([base, fused]).set_index("fund")
     comparison.to_csv(RESULTS / "tables" / "fusion_comparison.csv")
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(funds[FUSION_BASE_FUND]["growth"].index, funds[FUSION_BASE_FUND]["growth"].values,
-            label=FUSION_BASE_FUND, linewidth=1.3)
-    ax.plot(funds[fused_name]["growth"].index, funds[fused_name]["growth"].values,
-            label=fused_name, linewidth=1.3, linestyle="--")
-    ax.set_title(f"Sentiment fusion: {FUSION_BASE_FUND} before vs. after (out-of-sample)")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Growth of $1")
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    fig.savefig(RESULTS / "figures" / "fusion_comparison.png", dpi=150)
+    base_growth = funds[FUSION_BASE_FUND]["growth"]
+    fused_growth = funds[fused_name]["growth"]
+    spread = (fused_growth - base_growth) * 100  # cents per $1, easier to read than a 4th decimal
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 6.8), sharex=True,
+                                    gridspec_kw={"height_ratios": [2.6, 1], "hspace": 0.08,
+                                                 "top": 0.85, "bottom": 0.09, "left": 0.1, "right": 0.97})
+    fig.patch.set_facecolor(SURFACE)
+
+    ax1.plot(base_growth.index, base_growth.values, color=BLUE, linewidth=2,
+              label=FUSION_BASE_FUND, zorder=3)
+    ax1.plot(fused_growth.index, fused_growth.values, color=ORANGE, linewidth=2, linestyle="--",
+              label=fused_name, zorder=3)
+    _style_axis(ax1)
+    ax1.set_ylabel("Growth of $1", color=INK_SECONDARY, fontsize=9)
+    fig.text(0.1, 0.97, "Sentiment fusion: does tilting toward positive sentiment change the fund?",
+              color=INK_PRIMARY, fontsize=12.5, ha="left", va="top")
+    fig.text(0.1, 0.925, f"{FUSION_BASE_FUND} - out-of-sample, before vs. after a lagged sentiment tilt",
+              color=INK_MUTED, fontsize=9, ha="left", va="top")
+    legend = ax1.legend(loc="lower right", frameon=False, fontsize=8.5, labelcolor=INK_SECONDARY)
+
+    ax2.fill_between(spread.index, spread.values, 0, where=(spread.values >= 0),
+                      color=BLUE, alpha=0.55, linewidth=0, zorder=2)
+    ax2.fill_between(spread.index, spread.values, 0, where=(spread.values < 0),
+                      color=RED, alpha=0.55, linewidth=0, zorder=2)
+    ax2.axhline(0, color=BASELINE, linewidth=1, zorder=3)
+    _style_axis(ax2)
+    ax2.set_ylabel("Tilt effect\n(cents per $1)", color=INK_SECONDARY, fontsize=8.5)
+    ax2.set_xlabel("Date", color=INK_SECONDARY, fontsize=9)
+    end_spread = spread.iloc[-1]
+    ax2.text(0.995, 0.06, f"{'+' if end_spread >= 0 else ''}{end_spread:.1f}¢ by {spread.index[-1].date()}",
+              transform=ax2.transAxes, ha="right", va="bottom", fontsize=8, color=INK_SECONDARY)
+
+    for ax in (ax1, ax2):
+        ax.margins(x=0.01)
+
+    fig.savefig(RESULTS / "figures" / "fusion_comparison.png", dpi=150, facecolor=SURFACE)
     plt.close(fig)
     return comparison
 
