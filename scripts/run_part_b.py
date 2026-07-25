@@ -216,42 +216,63 @@ def fusion_comparison(funds: dict, fused_name: str, perf_table: pd.DataFrame):
     fused_growth = funds[fused_name]["growth"]
     spread = (fused_growth - base_growth) * 100  # cents per $1, easier to read than a 4th decimal
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 6.8), sharex=True,
-                                    gridspec_kw={"height_ratios": [2.6, 1], "hspace": 0.08,
-                                                 "top": 0.85, "bottom": 0.09, "left": 0.1, "right": 0.97})
+    # The base and fused growth paths are within a few cents of each other
+    # almost every day - that IS the finding (the tilt is a small nudge, not
+    # a redesign of the fund), and no amount of line styling makes two nearly
+    # identical series look visually distinct without misrepresenting them.
+    # So: drop the overlapping-lines chart entirely. The spread (fused - base)
+    # is the only view that actually carries information, so it becomes the
+    # single hero chart, with the headline metrics as text stat-callouts above
+    # it rather than fought for on the chart itself.
+    fig = plt.figure(figsize=(9, 5.6))
     fig.patch.set_facecolor(SURFACE)
+    gs = fig.add_gridspec(2, 1, height_ratios=[1, 3.2], hspace=0.05,
+                           top=0.80, bottom=0.11, left=0.1, right=0.97)
+    ax_stats = fig.add_subplot(gs[0])
+    ax_spread = fig.add_subplot(gs[1])
 
-    # The two series are within a few cents of each other almost everywhere, so
-    # equal-weight lines just merge into one blob. Instead: a thick, pale line
-    # for the base fund sits BEHIND a thin, crisp dashed line for the fused
-    # fund - wherever they diverge, the pale line pokes out as a visible edge
-    # rather than the two strokes fighting for the same pixels.
-    ax1.plot(base_growth.index, base_growth.values, color=BLUE, linewidth=3.2,
-              alpha=0.45, solid_capstyle="round", label=FUSION_BASE_FUND, zorder=2)
-    ax1.plot(fused_growth.index, fused_growth.values, color=ORANGE, linewidth=1.3,
-              linestyle=(0, (4, 2)), label=fused_name, zorder=3)
-    _style_axis(ax1)
-    ax1.set_ylabel("Growth of $1", color=INK_SECONDARY, fontsize=9)
-    fig.text(0.1, 0.97, "Sentiment fusion: does tilting toward positive sentiment change the fund?",
+    fig.text(0.1, 0.96, "Sentiment fusion: does tilting toward positive sentiment change the fund?",
               color=INK_PRIMARY, fontsize=12.5, ha="left", va="top")
-    fig.text(0.1, 0.925, f"{FUSION_BASE_FUND} - out-of-sample, before vs. after a lagged sentiment tilt",
+    fig.text(0.1, 0.915, f"{FUSION_BASE_FUND} vs. {fused_name} - out-of-sample daily spread, in cents per $1 invested",
               color=INK_MUTED, fontsize=9, ha="left", va="top")
-    legend = ax1.legend(loc="lower right", frameon=False, fontsize=8.5, labelcolor=INK_SECONDARY)
 
-    ax2.fill_between(spread.index, spread.values, 0, where=(spread.values >= 0),
-                      color=BLUE, alpha=0.55, linewidth=0, zorder=2)
-    ax2.fill_between(spread.index, spread.values, 0, where=(spread.values < 0),
-                      color=RED, alpha=0.55, linewidth=0, zorder=2)
-    ax2.axhline(0, color=BASELINE, linewidth=1, zorder=3)
-    _style_axis(ax2)
-    ax2.set_ylabel("Tilt effect\n(cents per $1)", color=INK_SECONDARY, fontsize=8.5)
-    ax2.set_xlabel("Date", color=INK_SECONDARY, fontsize=9)
+    ax_stats.axis("off")
+    stat_specs = [
+        ("Ann. return", base["annualised_return"], fused["annualised_return"], "pp", 100),
+        ("Ann. volatility", base["annualised_volatility"], fused["annualised_volatility"], "pp", 100),
+        ("Sharpe ratio", base["sharpe_ratio"], fused["sharpe_ratio"], "", 1),
+        ("Max drawdown", base["max_drawdown"], fused["max_drawdown"], "pp", 100),
+    ]
+    for i, (label, b, f, unit, scale) in enumerate(stat_specs):
+        x = 0.02 + i * 0.25
+        delta = (f - b) * scale
+        delta_color = BLUE if delta >= 0 else RED
+        fmt = "{:+.2f}" if unit == "" else "{:+.2f}" + unit
+        ax_stats.text(x, 0.85, label, transform=ax_stats.transAxes, fontsize=9,
+                       color=INK_MUTED, ha="left", va="top")
+        base_str = f"{b:.2f}" if unit == "" else f"{b*scale:.1f}{unit}"
+        fused_str = f"{f:.2f}" if unit == "" else f"{f*scale:.1f}{unit}"
+        ax_stats.text(x, 0.48, f"{base_str} → {fused_str}", transform=ax_stats.transAxes,
+                       fontsize=13, color=INK_PRIMARY, ha="left", va="top")
+        ax_stats.text(x, 0.05, fmt.format(delta), transform=ax_stats.transAxes,
+                       fontsize=9.5, color=delta_color, ha="left", va="top", weight="bold")
+
+    ax_spread.fill_between(spread.index, spread.values, 0, where=(spread.values >= 0),
+                            color=BLUE, alpha=0.6, linewidth=0, zorder=2)
+    ax_spread.fill_between(spread.index, spread.values, 0, where=(spread.values < 0),
+                            color=RED, alpha=0.6, linewidth=0, zorder=2)
+    ax_spread.axhline(0, color=BASELINE, linewidth=1, zorder=3)
+    _style_axis(ax_spread)
+    ax_spread.set_ylabel("Tilt effect (cents per $1)", color=INK_SECONDARY, fontsize=9)
+    ax_spread.set_xlabel("Date", color=INK_SECONDARY, fontsize=9)
+    ax_spread.margins(x=0.01)
     end_spread = spread.iloc[-1]
-    ax2.text(0.995, 0.06, f"{'+' if end_spread >= 0 else ''}{end_spread:.1f}¢ by {spread.index[-1].date()}",
-              transform=ax2.transAxes, ha="right", va="bottom", fontsize=8, color=INK_SECONDARY)
-
-    for ax in (ax1, ax2):
-        ax.margins(x=0.01)
+    ax_spread.text(0.995, 0.05, f"{'+' if end_spread >= 0 else ''}{end_spread:.1f}¢ by {spread.index[-1].date()}",
+                    transform=ax_spread.transAxes, ha="right", va="bottom", fontsize=8, color=INK_SECONDARY)
+    ax_spread.text(0.005, 0.95, "sentiment tilt ahead", transform=ax_spread.transAxes,
+                    ha="left", va="top", fontsize=8, color=BLUE)
+    ax_spread.text(0.005, 0.05, "sentiment tilt behind", transform=ax_spread.transAxes,
+                    ha="left", va="bottom", fontsize=8, color=RED)
 
     fig.savefig(RESULTS / "figures" / "fusion_comparison.png", dpi=150, facecolor=SURFACE)
     plt.close(fig)
