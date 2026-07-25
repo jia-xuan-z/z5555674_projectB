@@ -111,6 +111,9 @@ alternative windows/rebalance frequencies or tilt strengths to show the
 defaults, and I should do that before writing the report's methodology
 section.
 
+
+
+
 ---
 
 # Prompt log - Streamlit app (Station 4)
@@ -153,3 +156,60 @@ live. Re-tested: 100% Equity Min-Variance now reproduces 10.26% / 15.98% /
 without error over the intersected date range. This is a fusion-adjacent
 lesson worth restating in the report if I discuss the app: never blend
 return series with different native calendars by zero-filling the gap.
+
+---
+
+# Prompt log - redesigning the fusion comparison figure
+
+## What I wanted
+The `fusion_comparison.png` exhibit (base equity fund vs. the sentiment-
+tilted version) was hard to read - two growth-of-$1 lines that track each
+other almost exactly, so it looked like a single smudged line rather than a
+comparison. I wanted a version that actually shows whether the tilt did
+anything.
+
+## Prompt(s)
+- "你能不能改改这张图的visualization，感觉观感很不好" - the chart's
+  visualization felt bad, asked for a redesign.
+- Pasted a zoomed-in screenshot of the two lines stuck together and asked:
+  "能不能改一下他们两个各自的粗细让这个区别看起来更明显一点" - can you
+  adjust each line's thickness so the difference between them is more
+  visible.
+- "不行我还是不满意，蓝色的现在太粗了都看不出来变化了，这个图有没有别的
+  呈现方式。一定要用这种折线图吗" - still not happy, the thickened blue
+  line now hides the change entirely; is there a different way to present
+  this, does it have to be this kind of line chart.
+
+## What the assistant produced
+Three iterations, each addressing the previous one's complaint at face
+value rather than questioning the chart form: (1) a two-panel figure adding
+a spread/difference sub-panel below the original overlapping lines; (2)
+asymmetric line weights - a thick pale base line behind a thin crisp dashed
+tilt line - to try to make the overlap itself look intentional; (3) after
+the user pushed back a third time, dropped the growth-of-$1 line overlay
+entirely and rebuilt the exhibit as stat-callout comparisons (return, vol,
+Sharpe, max drawdown, each shown as "base -> fused" with a signed, colour-
+coded delta) sitting above a single full-size spread-over-time area chart.
+
+## What was wrong or risky
+The first two iterations were the wrong response to the underlying
+problem. The base and fused funds really are within a few cents of each
+other on almost every day - that IS the finding (a lagged sentiment tilt
+with tilt_strength=0.5 is a small nudge, not a redesign of the portfolio),
+and no line-weight or dash trick makes two genuinely near-identical series
+look visually distinct without overstating a difference that isn't there.
+I kept trying to solve a chart-form problem with chart-styling fixes for
+two rounds before addressing the actual issue: an overlapping-line chart
+is the wrong form when the whole point is a small difference between two
+similar series.
+
+## What I changed and why
+Replaced the line-overlay approach with a chart form suited to a small
+delta: the metrics themselves (already computed and saved in
+fusion_comparison.csv) as compact before/after text stats up top, and the
+signed spread (fused minus base, in cents per $1) as the one chart, coloured
+diverging blue (tilt ahead) / red (tilt behind). This is also just a more
+honest picture of the result: the fusion is essentially neutral (Sharpe
+0.59 -> 0.58, a few basis points either way through 2021 and reversing
+after mid-2022), and the redesigned figure shows that plainly instead of
+implying a visual difference that isn't really there.
