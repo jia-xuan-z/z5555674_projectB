@@ -169,18 +169,45 @@ def sharpe_barplot_figure(perf_table: pd.DataFrame):
 
 
 def sentiment_index_figure(sector_index: pd.DataFrame):
-    fig, ax = plt.subplots(figsize=(9, 5.5))
-    for sector, g in sector_index.groupby("sector"):
-        g = g.sort_values("date")
+    # 10 sectors as overlapping lines is a rainbow spaghetti chart - no single
+    # sector is traceable and the legend does more work than the plot. Small
+    # multiples (one thin panel per sector, sharing one y-scale) trade a
+    # single glance for the ability to actually read any one sector, and a
+    # shared scale keeps them comparable at a glance.
+    surface, ink_primary, ink_secondary, ink_muted = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
+    gridline, baseline, blue = "#e1e0d9", "#c3c2b7", "#2a78d6"
+
+    sectors = sorted(sector_index["sector"].unique())
+    y_min = sector_index["sentiment_index"].rolling(21, min_periods=5).mean().min()
+    y_max = sector_index["sentiment_index"].rolling(21, min_periods=5).mean().max()
+    pad = (y_max - y_min) * 0.1
+
+    fig, axes = plt.subplots(2, 5, figsize=(12, 5.2), sharex=True, sharey=True)
+    fig.patch.set_facecolor(surface)
+    fig.subplots_adjust(top=0.85, bottom=0.11, left=0.06, right=0.98, hspace=0.45, wspace=0.12)
+
+    for ax, sector in zip(axes.flat, sectors):
+        g = sector_index.loc[sector_index["sector"] == sector].sort_values("date")
         smoothed = g["sentiment_index"].rolling(21, min_periods=5).mean()
-        ax.plot(g["date"], smoothed, label=sector, linewidth=1)
-    ax.axhline(0, color="black", linewidth=0.7, linestyle="--")
-    ax.set_title("Sector news-sentiment index (21-trading-day rolling mean VADER compound, 2020-2023)")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Sentiment index")
-    ax.legend(fontsize=7, ncol=2, loc="upper left")
-    fig.tight_layout()
-    fig.savefig(RESULTS / "figures" / "sentiment_index.png", dpi=150)
+        ax.set_facecolor(surface)
+        ax.axhline(0, color=baseline, linewidth=0.8, zorder=1)
+        ax.plot(g["date"], smoothed, color=blue, linewidth=1.3, zorder=2)
+        ax.set_ylim(y_min - pad, y_max + pad)
+        ax.set_title(sector, fontsize=10, color=ink_primary, loc="left", pad=4)
+        for spine in ("top", "right"):
+            ax.spines[spine].set_visible(False)
+        for spine in ("left", "bottom"):
+            ax.spines[spine].set_color(baseline)
+        ax.grid(axis="y", color=gridline, linewidth=0.6, zorder=0)
+        ax.set_axisbelow(True)
+        ax.tick_params(colors=ink_muted, labelsize=7)
+        ax.tick_params(axis="x", rotation=45)
+
+    fig.text(0.06, 0.965, "Sector news-sentiment index", color=ink_primary, fontsize=13, ha="left", va="top")
+    fig.text(0.06, 0.925, "21-trading-day rolling mean VADER compound score, one panel per sector, "
+                          "same scale (2020-2023)", color=ink_secondary, fontsize=9, ha="left", va="top")
+
+    fig.savefig(RESULTS / "figures" / "sentiment_index.png", dpi=150, facecolor=surface)
     plt.close(fig)
 
 
