@@ -254,7 +254,7 @@ all.
 
 ---
 
-# Prompt log - redesigning the weights-over-time figure, which surfaced a real optimiser bug
+# Prompt log - redesigning the weights-over-time figure
 
 ## What I wanted
 Fix the weights_over_time chart, which had the opposite failure from the
@@ -265,17 +265,44 @@ sentiment chart: 8 top holdings stacked under a giant, undifferentiated
 - Pasted the stacked-area chart and said: "改这个吧" - fix this one.
 
 ## What the assistant produced
-First pass: dropped the stacking and plotted the top-8 holdings as their
-own lines (not stacked against "Other") using the validated 8-colour
-categorical palette. Re-ran and looked at the result before shipping it.
+Dropped the stacking and plotted the top-8 holdings as their own lines
+(not stacked against "Other") using the validated 8-colour categorical
+palette, so each holding's own weight trajectory is legible instead of
+being squeezed into a thin band under one dominant block.
 
 ## What was wrong or risky
-The redesigned chart showed all 8 lines flatlining at EXACTLY 2.00% (=1/50,
-equal weight) from mid-2021 onward and never moving again for the rest of
-the 3-year sample - a pattern too clean to be a real result. This is
-precisely the "solver silently stalls" failure the brief warns about
-(Appendix / Important Points: "optimisers on tiny daily-return covariances
-can silently stall... sanity-check that weights actually change across
+Nothing wrong with the redesign itself, but re-running it to check the
+output surfaced a separate, serious problem in the underlying data (all 8
+lines flatlining at exactly equal weight from mid-2021 onward) - see the
+next log entry ("investigating and fixing the silent optimiser stall") for
+that investigation, since it turned into a real correctness bug fix rather
+than a visualisation task and is worth keeping separate.
+
+## What I changed and why
+Chart form only at this stage: small multiples were the fix for the
+sentiment chart's too-many-series problem; here the fix for the opposite
+problem (one dominant category burying the rest) was to drop the "Other"
+bucket entirely and let the 8 holdings of interest use the full vertical
+scale as plain lines. The figure was re-generated again after the
+optimiser fix below, since the underlying weights changed.
+
+---
+
+# Prompt log - investigating and fixing a silent SLSQP optimiser stall
+
+## What I wanted
+No new prompt here - this was triggered by looking closely at the output
+of the weights-over-time redesign above, not by a new request. Once I saw
+it, I treated it as the priority over any further chart work.
+
+## What I found
+The redesigned weights-over-time chart showed all 8 top equity min-variance
+holdings flatlining at EXACTLY 2.00% (=1/50, equal weight) from mid-2021
+onward and never moving again for the rest of the 3-year sample - a
+pattern too clean to be a real optimisation result. This is precisely the
+"solver silently stalls" failure the brief warns about (Appendix /
+Important Points: "optimisers on tiny daily-return covariances can
+silently stall... sanity-check that weights actually change across
 methods"). I stopped the chart work and investigated directly: reproduced
 a single rebalance (2022-06) outside the pipeline and found scipy's SLSQP
 terminated after nit=1 with res.success=True and zero movement from the
@@ -293,6 +320,14 @@ counter (added in the Station 3 log entry) did NOT catch this, because
 scipy reports success=True for a silent stall - checking res.success is
 not the same as checking that the optimiser actually moved.
 
+## What was wrong or risky
+Every fund built on min-variance or risk-parity across all three universes
+was, before this fix, either fully or mostly just equal-weight wearing a
+different label - a real methodological flaw, not a display issue, and one
+the brief specifically warned could happen and specifically asked to be
+sanity-checked for. My existing convergence check was insufficient because
+it only asked "did scipy report success," not "did scipy actually search."
+
 ## What I changed and why
 In src/portfolios.py: rescaled the min-variance and risk-parity objectives
 by a constant factor (1e4) before passing them to SLSQP - multiplying an
@@ -302,21 +337,21 @@ ftol to 1e-14 with maxiter=500 on all three methods as a second line of
 defence. Verified directly on the 2022-06 case (nit went from 1 to 13-24,
 weights moved by up to 0.15 instead of 0.0) and then re-scanned all 9
 backtests: exact-equal-weight rebalances dropped from 144 total (31+36+1+
-39+36+1) to 3, and those 3 now correctly report
-n_convergence_failures=1 each (a genuine occasional non-convergence,
-safely caught and falling back to equal weight for just that one
-rebalance, not a silent one). Re-ran the full pipeline: the performance
-numbers changed materially, not just the chart - e.g. Equity Min-Variance's
-annualised volatility dropped from 15.98% to 12.76% and Sharpe from 0.64 to
-0.49, which now makes more economic sense (a genuine minimum-variance
-solution should have LOWER volatility than the equal-weight fallback it
-was silently defaulting to, not the same or higher). This means every
-number in results/tables/performance_metrics.csv, fund_returns.csv, and
-every figure derived from min-variance or risk-parity funds was wrong
-before this fix - caught only because a chart redesign happened to make
-the underlying bug visually obvious, not because I had verified solver
-convergence at the level of "did it actually move," only "did it report
-success." I should build that stronger check (verify against multiple
-random restarts, or compare the found objective value to the equal-weight
-objective value) into the standard workflow rather than relying on a
-chart to reveal it next time.
+39+36+1) to 3, and those 3 now correctly report n_convergence_failures=1
+each (a genuine occasional non-convergence, safely caught and falling back
+to equal weight for just that one rebalance, not a silent one). Re-ran the
+full pipeline: the performance numbers changed materially, not just the
+chart - e.g. Equity Min-Variance's annualised volatility dropped from
+15.98% to 12.76% and Sharpe from 0.64 to 0.49, which now makes more
+economic sense (a genuine minimum-variance solution should have LOWER
+volatility than the equal-weight fallback it was silently defaulting to,
+not the same or higher). This means every number in
+results/tables/performance_metrics.csv, fund_returns.csv, and every figure
+derived from min-variance or risk-parity funds was wrong before this fix -
+caught only because a chart redesign happened to make the underlying bug
+visually obvious, not because I had verified solver convergence at the
+level of "did it actually move," only "did it report success." I should
+build that stronger check (verify against multiple random restarts, or
+compare the found objective value to the equal-weight objective value)
+into the standard workflow rather than relying on a chart to reveal it
+next time.
