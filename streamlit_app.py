@@ -1,7 +1,8 @@
 """SentiFolio - systematic multi-asset funds with news-sentiment analytics.
 
 The deployed app only reads precomputed artifacts from results/ (written by
-scripts/run_part_b.py) - it never imports nltk or recomputes a backtest.
+scripts/run_part_b.py) - it never scores sentiment or recomputes a backtest
+at runtime, so the sentiment-scoring library stays out of this file.
 
 Run locally:   streamlit run streamlit_app.py
 Deploy:        push this folder to a public GitHub repo, then connect it on
