@@ -107,13 +107,15 @@ with tab_funds:
 
 with tab_sentiment:
     st.subheader("Sector news-sentiment index")
-    st.caption("Equal-weight VADER compound sentiment across each sector's tickers, "
-               "21-trading-day rolling mean. Lagged by at least one trading day before any fund uses it.")
+    st.caption("Equal-weight finVADER sentiment across each sector's tickers, standardised against "
+               "each sector's own history (z-score) so 0 = normal, positive = relatively greedy, "
+               "negative = relatively fearful. 21-trading-day rolling mean. Lagged by at least one "
+               "trading day before any fund uses it.")
     sectors = sorted(sector_sentiment["sector"].unique())
     chosen_sectors = st.multiselect("Sectors", sectors, default=sectors[:4])
     if chosen_sectors:
         wide = (sector_sentiment[sector_sentiment["sector"].isin(chosen_sectors)]
-                .pivot(index="date", columns="sector", values="sentiment_index")
+                .pivot(index="date", columns="sector", values="sentiment_index_z")
                 .rolling(21, min_periods=5).mean())
         st.line_chart(wide)
     else:

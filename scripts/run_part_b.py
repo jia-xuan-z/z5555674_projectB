@@ -59,7 +59,22 @@ def build_funds(universe_returns: dict) -> dict:
 
 
 def build_sentiment(headline_panel: pd.DataFrame):
-    scores = sentiment.score_headlines(headline_panel)
+    """Score headlines with finVADER (VADER + finance lexicons) - see
+    src/sentiment.py for why plain VADER under-covers finance vocabulary.
+    Also scores a plain-VADER pass for a documented before/after comparison
+    (innovation evidence), saved to results/tables/vader_vs_finvader.csv.
+    """
+    scores = sentiment.score_headlines(headline_panel, model="finvader")
+    scores_vader = sentiment.score_headlines(headline_panel, model="vader")
+    comparison = pd.DataFrame([
+        {"model": "VADER", "mean_sentiment": scores_vader["sentiment"].mean(),
+         "pct_exact_zero": (scores_vader["sentiment"] == 0).mean()},
+        {"model": "finVADER", "mean_sentiment": scores["sentiment"].mean(),
+         "pct_exact_zero": (scores["sentiment"] == 0).mean()},
+    ])
+    comparison.to_csv(RESULTS / "tables" / "vader_vs_finvader.csv", index=False)
+    print(comparison.to_string(index=False))
+
     sector_index = sentiment.sector_sentiment_index(scores)
     return scores, sector_index
 
@@ -203,13 +218,21 @@ def sentiment_index_figure(sector_index: pd.DataFrame):
     # multiples (one thin panel per sector, sharing one y-scale) trade a
     # single glance for the ability to actually read any one sector, and a
     # shared scale keeps them comparable at a glance.
+    #
+    # Plots the STANDARDISED index (z-score against each sector's own mean/
+    # std), not the raw finVADER average: headlines are mildly positive on
+    # average (as the course's own fear-and-greed index finds - raw scores
+    # read "greedy" on ~94% of days), so a raw index would sit above its
+    # zero line almost every day and never distinguish a relatively fearful
+    # day from a normal one. Standardising is what makes "relatively more
+    # fearful/greedy than usual for this sector" readable at all.
     surface, ink_primary, ink_secondary, ink_muted = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
-    gridline, baseline, blue = "#e1e0d9", "#c3c2b7", "#2a78d6"
+    gridline, baseline, blue, red = "#e1e0d9", "#c3c2b7", "#2a78d6", "#e34948"
 
     sectors = sorted(sector_index["sector"].unique())
-    y_min = sector_index["sentiment_index"].rolling(21, min_periods=5).mean().min()
-    y_max = sector_index["sentiment_index"].rolling(21, min_periods=5).mean().max()
-    pad = (y_max - y_min) * 0.1
+    smoothed_all = sector_index.groupby("sector")["sentiment_index_z"].transform(
+        lambda s: s.rolling(21, min_periods=5).mean())
+    y_max = max(abs(smoothed_all.min()), abs(smoothed_all.max())) * 1.1
 
     fig, axes = plt.subplots(2, 5, figsize=(12, 5.2), sharex=True, sharey=True)
     fig.patch.set_facecolor(surface)
@@ -217,11 +240,13 @@ def sentiment_index_figure(sector_index: pd.DataFrame):
 
     for ax, sector in zip(axes.flat, sectors):
         g = sector_index.loc[sector_index["sector"] == sector].sort_values("date")
-        smoothed = g["sentiment_index"].rolling(21, min_periods=5).mean()
+        smoothed = g["sentiment_index_z"].rolling(21, min_periods=5).mean()
         ax.set_facecolor(surface)
         ax.axhline(0, color=baseline, linewidth=0.8, zorder=1)
-        ax.plot(g["date"], smoothed, color=blue, linewidth=1.3, zorder=2)
-        ax.set_ylim(y_min - pad, y_max + pad)
+        ax.fill_between(g["date"], smoothed, 0, where=(smoothed >= 0), color=blue, alpha=0.5, linewidth=0, zorder=1)
+        ax.fill_between(g["date"], smoothed, 0, where=(smoothed < 0), color=red, alpha=0.5, linewidth=0, zorder=1)
+        ax.plot(g["date"], smoothed, color=ink_secondary, linewidth=0.8, zorder=2)
+        ax.set_ylim(-y_max, y_max)
         ax.set_title(sector, fontsize=10, color=ink_primary, loc="left", pad=4)
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
@@ -232,9 +257,10 @@ def sentiment_index_figure(sector_index: pd.DataFrame):
         ax.tick_params(colors=ink_muted, labelsize=7)
         ax.tick_params(axis="x", rotation=45)
 
-    fig.text(0.06, 0.965, "Sector news-sentiment index", color=ink_primary, fontsize=13, ha="left", va="top")
-    fig.text(0.06, 0.925, "21-trading-day rolling mean VADER compound score, one panel per sector, "
-                          "same scale (2020-2023)", color=ink_secondary, fontsize=9, ha="left", va="top")
+    fig.text(0.06, 0.965, "Sector news-sentiment index (standardised)", color=ink_primary, fontsize=13, ha="left", va="top")
+    fig.text(0.06, 0.925, "21-trading-day rolling mean of the sentiment z-score (finVADER, relative to each "
+                          "sector's own 2020-2023 mean/std); blue = relatively greedy, red = relatively fearful",
+              color=ink_secondary, fontsize=9, ha="left", va="top")
 
     fig.savefig(RESULTS / "figures" / "sentiment_index.png", dpi=150, facecolor=surface)
     plt.close(fig)

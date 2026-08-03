@@ -355,3 +355,74 @@ build that stronger check (verify against multiple random restarts, or
 compare the found objective value to the equal-weight objective value)
 into the standard workflow rather than relying on a chart to reveal it
 next time.
+
+---
+
+# Prompt log - finVADER and a standardised sentiment index (course-lecture-driven)
+
+## What I wanted
+After reading the course's own week08 (VADER) and week09 (fear-and-greed
+index) lecture PDFs while drafting the report, I wanted to check whether
+my sentiment implementation matched what the course itself teaches as
+best practice, since both lectures turned out to describe problems that
+matched my own results almost exactly.
+
+## Prompt(s)
+- Attached 8 lecture PDFs and asked: "在阅读完这些文件之后，你对这个report
+  有没有新的看法，或者你觉得什么地方可以改进" (after reading these, do you
+  have new views on the report, or see anything to improve).
+- "好的你给我改吧" (go ahead and make the changes) - approved implementing
+  the three concrete things identified: standardising the sentiment index,
+  adding finVADER, and updating the report's explanations/citations.
+
+## What the assistant produced
+Two real findings from the lectures, not just report-wording fixes:
+(1) week09 explicitly builds and then critiques a raw (non-standardised)
+sentiment index - "In levels the index is almost always greedy... A
+measure that returns the same answer every day carries no information
+about any particular day" - and fixes it by standardising against the
+index's own mean/std. My sector_sentiment_index() had exactly that flaw:
+it only ever reported the raw average, never standardised. (2) week08 and
+week09 both document that plain VADER under-covers finance vocabulary
+(hawkish, guidance, impairment score as 0 - absent, not neutral) and that
+ordinary accounting words get scored as generically negative (Loughran &
+McDonald 2011); the course's own fix is finVADER (VADER + ~7,500 finance
+terms from SentiBigNomics and Henry's list), a real installable package,
+not something to build from scratch.
+
+## What was wrong or risky
+Implementing finVADER directly via the package's own `finvader()` function
+was far too slow to run at scale (a background test against all 37,962
+ticker-days did not finish in 3 minutes) - the function rebuilds and
+re-merges its ~7,500-term lexicon from scratch on every single call,
+which is fine for one headline (as shown in the lecture slide) but not
+for scoring headlines at the scale this project needs. I would not have
+caught this without actually running it end to end rather than trusting
+the package's documented usage pattern.
+
+## What I changed and why
+In src/sentiment.py: replaced the per-call `finvader()` usage with a
+scorer built once (merging the SentiBignomics and Henry lexicons into a
+single nltk SentimentIntensityAnalyzer up front, mirroring finvader's own
+"use both lists" code path) and reused across all headlines - this is the
+"built once, so it is fast" pattern the course's own fear_greed_tools
+helper uses. Scoring time dropped from >3 minutes (killed, never
+finished) to 11.9 seconds for all 37,962 ticker-day rows. Also added
+`sentiment_index_z`, the index standardised per sector against its own
+mean/std, and made it - not the raw score - the one plotted in
+sentiment_index_figure() and shown in the Streamlit Sentiment tab, with a
+diverging red/blue fill (fearful/greedy) instead of a single-hue line.
+build_sentiment() in scripts/run_part_b.py now also runs a plain-VADER
+pass alongside finVADER purely for comparison, saved to
+results/tables/vader_vs_finvader.csv (mean sentiment 0.113 for VADER vs.
+0.072 for finVADER; exact-zero rate 23.0% vs. 5.9% - finVADER's larger
+vocabulary leaves far fewer headlines with no scored words at all), as
+documented evidence for the Innovation criterion rather than an
+unsubstantiated claim of using a "better" model. The fusion tilt in
+src/fusion.py now runs on finVADER-based sentiment automatically, since it
+consumes the same `scores` dataframe build_sentiment() produces - no
+separate change needed there, but worth being deliberate that this altered
+the fusion result slightly (Sharpe 0.581 with plain VADER before this
+change, 0.584 with finVADER now) and re-verifying the full pipeline still
+runs end to end and check_handin.py still passes (22 checks, only the
+pycache-cleanup reminder left) before treating this as done.

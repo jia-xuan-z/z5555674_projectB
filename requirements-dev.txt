@@ -4,3 +4,8 @@
 # Keep these OUT of the deployed app so Streamlit cold starts stay fast - the app
 # should load precomputed artifacts from results/, not score sentiment at runtime.
 nltk>=3.8
+# finvader (VADER + finance lexicons, Korab 2023) declares a stale nltk==3.6.2
+# pin in its own metadata - pip will warn about this, but it works fine
+# against a current nltk (tested against 3.10.1); only its lexicon dicts and
+# nltk's SentimentIntensityAnalyzer are used, both stable APIs.
+finvader>=1.0.2
