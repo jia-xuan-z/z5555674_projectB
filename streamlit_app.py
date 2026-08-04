@@ -83,12 +83,19 @@ with tab_funds:
     perf_display["annualised_volatility"] = (perf_display["annualised_volatility"] * 100).round(2)
     perf_display["max_drawdown"] = (perf_display["max_drawdown"] * 100).round(2)
     perf_display["sharpe_ratio"] = perf_display["sharpe_ratio"].round(3)
+    perf_display["avg_turnover"] = (perf_display["avg_turnover"] * 100).round(1)
+    perf_display["latest_max_weight"] = (perf_display["latest_max_weight"] * 100).round(1)
+    perf_display["effective_n_holdings"] = perf_display["effective_n_holdings"].round(1)
+    perf_display = perf_display.drop(columns=["herfindahl_index"])
     perf_display = perf_display.rename(columns={
         "annualised_return": "Ann. return (%)", "annualised_volatility": "Ann. vol (%)",
         "sharpe_ratio": "Sharpe", "max_drawdown": "Max drawdown (%)", "fund": "Fund",
-        "periods_per_year": "Periods/yr",
+        "periods_per_year": "Periods/yr", "avg_turnover": "Avg turnover (%)",
+        "latest_max_weight": "Largest holding (%)", "effective_n_holdings": "Effective N holdings",
     })
     st.dataframe(perf_display, width="stretch", hide_index=True)
+    st.caption("Avg turnover: mean one-way turnover per rebalance. Effective N holdings: 1/Herfindahl "
+               "index, computed from the most recent rebalance - lower means more concentrated.")
 
     st.subheader("Fund fact sheet")
     fund_choice = st.selectbox("Choose a fund", ALL_FUNDS, index=ALL_FUNDS.index("Combined Max-Sharpe")
