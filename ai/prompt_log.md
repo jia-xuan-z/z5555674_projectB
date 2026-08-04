@@ -674,3 +674,44 @@ Estimation window: 252 trading days, rolled forward | Rebalance: monthly
 | Current concentration: largest holding 45.3%, effective 3.8 equal-sized
 holdings" - matching the numbers already verified in
 performance_metrics.csv. check_handin.py still passes (22 checks).
+
+---
+
+# Prompt log - formatting the new diagnostic columns in the app table
+
+## What I wanted
+Fix a display inconsistency the user spotted after deploying and
+rebooting the app: the "Compare funds" table's newer columns
+(avg_turnover, latest_max_weight, herfindahl_index, effective_n_holdings)
+showed their raw snake_case CSV column names, while the original six
+columns had been renamed to readable labels ("Ann. return (%)", "Sharpe",
+etc.) - inconsistent formatting in a table meant for a non-technical
+investor reader.
+
+## Prompt(s)
+- Shared a screenshot of the rebooted, live app and asked "长成这样是对的
+  吗" (does it look right like this) - the deployed app was functioning
+  correctly (right numbers, disclosures present), but I noticed the
+  formatting inconsistency myself while reviewing the screenshot and
+  flagged and fixed it without being explicitly asked to.
+
+## What the assistant produced
+In streamlit_app.py: scaled avg_turnover and latest_max_weight to
+percentages (rounded to 1dp) and effective_n_holdings to 1dp, dropped
+herfindahl_index from the displayed table entirely (effective_n_holdings
+is the same information in a more directly interpretable form - showing
+both is redundant for a reader who is not going to compute with the raw
+HHI), renamed the three kept columns to "Avg turnover (%)", "Largest
+holding (%)", "Effective N holdings", and added a one-line caption
+explaining what each means.
+
+## What was wrong or risky
+None - display-only change, verified the formatting logic against the
+real CSV data before committing (all 10 funds' rows print correctly,
+e.g. Crypto Max-Sharpe shows 32.5% turnover, 82.1% largest holding, 1.4
+effective holdings, matching the raw numbers already verified earlier).
+
+## What I changed and why
+Purely cosmetic/readability - no underlying data changed. The point was
+consistency: a reader scanning the table should not hit a wall of
+unlabelled snake_case columns partway through an otherwise clean table.
