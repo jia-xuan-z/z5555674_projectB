@@ -91,6 +91,39 @@ def build_fusion(funds: dict, scores: pd.DataFrame, equity_wide: pd.DataFrame):
     }
 
 
+TILT_STRENGTH_GRID = (0.25, 0.5, 1.0)
+
+
+def fusion_robustness_table(scores: pd.DataFrame, equity_wide: pd.DataFrame, base_weights: pd.DataFrame):
+    """Sensitivity of the fusion tilt to tilt_strength, at three PRE-SET
+    values (0.25, 0.5, 1.0) chosen before looking at any result. This is
+    reported as a robustness check across all three, not used to pick a
+    "best" tilt_strength - selecting whichever value performs best on this
+    same out-of-sample period and then reporting only that one would be
+    data snooping (using the test period to both choose and evaluate a
+    parameter). TILT_STRENGTH (0.5) stays the one used everywhere else in
+    the pipeline; this table only exists to show whether the qualitative
+    conclusion (roughly neutral effect) holds across a range of strengths.
+    """
+    base_metrics = portfolios.performance_metrics(
+        fusion.apply_weights_to_returns(base_weights, equity_wide), periods_per_year=252)
+    rows = [{"tilt_strength": 0.0, "annualised_return": base_metrics["annualised_return"],
+             "annualised_volatility": base_metrics["annualised_volatility"],
+             "sharpe_ratio": base_metrics["sharpe_ratio"], "max_drawdown": base_metrics["max_drawdown"],
+             "turnover": portfolios.average_turnover(base_weights)}]
+    for strength in TILT_STRENGTH_GRID:
+        tilted = fusion.apply_sentiment(base_weights, scores, tilt_strength=strength)
+        tilted_returns = fusion.apply_weights_to_returns(tilted, equity_wide)
+        m = portfolios.performance_metrics(tilted_returns, periods_per_year=252)
+        rows.append({"tilt_strength": strength, "annualised_return": m["annualised_return"],
+                      "annualised_volatility": m["annualised_volatility"], "sharpe_ratio": m["sharpe_ratio"],
+                      "max_drawdown": m["max_drawdown"], "turnover": portfolios.average_turnover(tilted)})
+    table = pd.DataFrame(rows)
+    table.to_csv(RESULTS / "tables" / "fusion_robustness.csv", index=False)
+    print(table.round(4).to_string(index=False))
+    return table
+
+
 def save_required_csvs(funds: dict):
     ret_rows = []
     for name, res in funds.items():
@@ -386,6 +419,10 @@ def main():
     equity_wide = portfolios.long_to_wide(data["Equity"])
     fused_name, fused_result = build_fusion(funds, scores, equity_wide)
     funds[fused_name] = fused_result
+
+    print("fusion tilt-strength robustness check...")
+    base_fund = funds[FUSION_BASE_FUND]
+    fusion_robustness_table(scores, equity_wide, base_fund["weights"])
 
     print("saving required CSVs...")
     save_required_csvs(funds)

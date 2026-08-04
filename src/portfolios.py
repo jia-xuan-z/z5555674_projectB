@@ -162,6 +162,16 @@ def oos_backtest(returns: pd.DataFrame, method: str = "min_variance",
     }
 
 
+def average_turnover(weights: pd.DataFrame) -> float:
+    """Mean one-way turnover per rebalance: 0.5 * sum(|w_t - w_t-1|), averaged
+    across all rebalances after the first (the first rebalance has no prior
+    weights to compare against, so it is excluded). 0.5x is the standard
+    one-way convention - it counts a full swap from one name to another as
+    one unit of turnover, not two (one sale + one purchase counted twice)."""
+    diffs = weights.diff().abs().sum(axis=1).iloc[1:]
+    return float(0.5 * diffs.mean())
+
+
 def performance_metrics(daily_returns: pd.Series, periods_per_year: int = 252, rf: float = 0.0) -> dict:
     """Annualised return, annualised volatility, Sharpe, and max drawdown.
 

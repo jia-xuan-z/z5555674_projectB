@@ -438,12 +438,11 @@ method (Equity Min-Variance) - it never showed more than one method, so
 it did not answer what the brief actually asked for.
 
 ## Prompt(s)
-- Pasted a review comment (from a checklist/review pass) pointing out
-  exactly this: "题目要求的是...across methods...你现在的Figure 3只展示
-  Equity Min-Variance fund, top 8 holdings...也就是只展示了一个方法，没有
-  体现'across methods'", with a suggested fix (small multiples per ticker,
-  each panel comparing the three methods).
-
+- weights_over_time.png does not fully meet the requirements now, 
+- can you redesign it using "cross method", Comparing the Three Methods Within the Same Asset Scope:
+Equity Min-Variance
+Equity Max-Sharpe
+Equity Risk-Parity
 ## What the assistant produced
 Verified the brief's exact wording first (PROJECT_BRIEF.md line 160)
 rather than taking the feedback on faith, then rebuilt
@@ -478,3 +477,56 @@ a year in 2021-2022 that both other methods never give it, then goes to
 zero. Re-ran the full pipeline and check_handin.py (22 checks, only the
 pycache reminder) to confirm nothing else broke from the signature change
 (fund_name= -> universe=).
+
+---
+
+# Prompt log - fusion tilt-strength robustness table
+
+## What I wanted
+Address an open item I had already flagged in an earlier log entry
+(Station 3 funds/sentiment/fusion) but never followed up on: tilt_strength
+= 0.5 for the sentiment fusion was an unmotivated default, never tested
+against alternatives, so I could not say whether the fusion's roughly-
+neutral result was specific to that one number or a more general pattern.
+
+## Prompt(s)
+- Pasted a review suggestion: test pre-set tilt strengths (0.25, 0.50,
+  1.00), build a robustness table of annualised return/volatility/Sharpe/
+  max drawdown/turnover across them, and explicitly warned against
+  picking whichever value looks best afterwards and reporting only that
+  one, since that would be data snooping - report all of them as a
+  robustness check instead. Asked "你觉得这个有道理吗" (does this make
+  sense) before implementing; after I agreed it was sound and explained
+  why (matches an already-flagged gap, correctly avoids re-optimising on
+  the OOS period), replied "好的" to proceed.
+
+## What the assistant produced
+Added `average_turnover()` to src/portfolios.py (mean one-way turnover
+per rebalance, 0.5 x sum of absolute weight changes, excluding the first
+rebalance which has no prior weights to compare against) and
+`fusion_robustness_table()` to scripts/run_part_b.py, which runs the
+fusion at the base fund (tilt_strength=0, i.e. no tilt) plus three preset
+strengths (0.25, 0.5, 1.0) chosen before looking at any result, and saves
+all four rows to results/tables/fusion_robustness.csv. TILT_STRENGTH
+(0.5) stays what every other part of the pipeline uses; this table is
+reporting only, never used to silently swap in a "better" value.
+
+## What was wrong or risky
+Nothing incorrect, but worth stating plainly: this is confirmatory
+evidence gathered on the same out-of-sample period the rest of the
+report already evaluates the fusion on, so it demonstrates the base
+result generalises across nearby parameter choices, not that it would
+hold on genuinely unseen future data - I should not oversell this table
+as validating the fusion approach more broadly than that.
+
+## What I changed and why
+Ran it once the code was in place: Sharpe declines monotonically as tilt
+strength rises (0.5865 at no tilt -> 0.5853 -> 0.5841 -> 0.5814 at
+tilt_strength=1.0) and turnover rises monotonically alongside it (0.342 ->
+0.343 -> 0.345 -> 0.351), with max drawdown also monotonically worsening.
+This is a cleaner, more defensible finding than the single tilt_strength
+=0.5 result alone: it shows a consistent direction across the whole
+tested range (more tilt = worse risk-adjusted performance and higher
+turnover), not noise specific to one arbitrary parameter value. Re-ran
+check_handin.py (22 checks, only the pycache reminder) to confirm nothing
+broke.
