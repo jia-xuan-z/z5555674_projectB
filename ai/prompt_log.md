@@ -789,3 +789,47 @@ since the actual editable report lives outside this repo while it's being
 drafted) to confirm nothing else broke.
 
 ---
+
+---
+
+# Prompt log - fixing the allocation tab's fixed-252 annualisation bug
+
+## What I wanted
+Fix a real, if minor, bug flagged by review: the "Build a portfolio" tab
+always annualised the blended return/volatility with 252, regardless of
+which funds were selected, so a 100%-crypto allocation (whose dates run on
+the 365-day calendar) had its annualised numbers understated.
+
+## Prompt(s)
+- Pasted two review points together: (1) ai/prompt_log.md had uncommitted
+  changes and needed pushing since it's graded, (2) the fixed-252
+  annualisation issue in streamlit_app.py:177, both labelled clearly
+  (point 2 as "Minor display issue only"). Asked what point 2 meant before
+  acting; after I explained both, replied "好的" to fix them.
+
+## What the assistant produced
+Committed the outstanding prompt_log.md changes first. Then, in
+streamlit_app.py's allocation tab, replaced the hardcoded `* 252` /
+`sqrt(252)` with a check: if every selected fund's name starts with
+"Crypto", annualise with 365; otherwise 252. This follows from how the
+blend's date range is actually built - `dropna()` restricts it to the
+INTERSECTION of every selected fund's live dates, and an equity or
+combined fund only has data on the ~252-day equity calendar, so including
+even one such fund caps the whole blend at 252 regardless of what else is
+mixed in. Only an all-crypto blend actually runs on the 365-day calendar.
+
+## What was wrong or risky
+None in the fix itself, but worth noting the reasoning isn't obvious from
+the symptom alone - a naive fix might have tried to average or weight the
+252/365 factors by allocation percentage, which would be wrong; the
+correct behaviour depends on which calendar the INTERSECTED dates actually
+fall on, not on the crypto allocation share.
+
+## What I changed and why
+Verified directly against real data rather than trusting the logic alone:
+a 100%-Crypto-Min-Variance blend now reproduces 81.97%/65.26% (365-day
+annualisation), matching performance_metrics.csv's 82.0%/65.3% row
+exactly, versus the old always-252 code understating it. A 50/50 Equity+
+Crypto blend correctly falls back to 252 with 753 dates (the equity
+calendar length), confirming the intersection logic. check_handin.py
+still passes (21 checks).

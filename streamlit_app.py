@@ -174,8 +174,18 @@ with tab_allocate:
                          .dropna())
         blended_ret = wide_returns[weights_vec.index] @ weights_vec
         blended_growth = (1 + blended_ret).cumprod()
-        ann_return = blended_ret.mean() * 252
-        ann_vol = blended_ret.std() * np.sqrt(252)
+        # The blend's dates are the INTERSECTION of every selected fund's live
+        # dates (see dropna() above). Equity/Combined funds only have data on
+        # equity trading days (~252/year), so including even one of them caps
+        # the blend at the 252-day calendar regardless of what else is picked.
+        # Only a blend of crypto-only funds actually runs on crypto's 365-day
+        # calendar - annualising a mixed or equity-containing blend with 365
+        # would overstate it, and always using 252 (the previous behaviour)
+        # understated a pure-crypto blend.
+        all_crypto = all(f.startswith("Crypto") for f in weights_vec.index)
+        periods_per_year = 365 if all_crypto else 252
+        ann_return = blended_ret.mean() * periods_per_year
+        ann_vol = blended_ret.std() * (periods_per_year ** 0.5)
         sharpe = ann_return / ann_vol if ann_vol > 0 else float("nan")
         max_dd = (blended_growth / blended_growth.cummax() - 1).min()
 
