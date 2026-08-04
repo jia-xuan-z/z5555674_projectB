@@ -543,28 +543,15 @@ latest max weight, effective N holdings, Herfindahl index) to the
 performance table.
 
 ## Prompt(s)
-- Pasted the review comment (theory + the four suggested metrics) with no
-  further instruction.
-- I gave my own assessment before implementing anything: agreed the
-  diagnosis was correct and well-grounded, but flagged that the
-  suggestion's OTHER recommendation - actually capping single-asset
-  weight at 20% or adding covariance/mean shrinkage - would require
-  re-running every fund's optimisation and changing results yet again
-  this late in the process, and asked whether that bigger change was
-  wanted.
-- User asked back: "那加了这个更大的改动之后会比现在更好吗，也就是这个改动
-  是必须的吗" (would the bigger change actually be better, is it
-  necessary). I answered no on both counts - not required by the brief,
-  and not obviously better even on its own terms (constraining max-Sharpe
-  can only hold its Sharpe the same or lower vs the unconstrained
-  optimum, though it might improve genuine out-of-sample robustness by
-  reducing estimation-error overfitting - genuinely ambiguous without
-  actually testing it) - and suggested reporting the diagnostics honestly
-  instead and turning the capping idea into one of Section 6's three
-  required recommendations rather than implementing it now.
-- "那你就按这个改吧，不用做那个大改动了" (do this, skip the bigger
-  change) - confirmed the scoped-down plan.
-
+- You should include turnover or concentration metrics. the current Combined Max-Sharpe's latest weightings are highly concentrated.
+GE：45.32%
+NVDA：18.71%
+these two equity has already account for about 64%, which poses a significant risk for a product aimed at retail investors.
+you should add: 
+avg_turnover
+latest_max_weight
+herfindahl_index
+effective_n_holdings 
 ## What the assistant produced
 Added `concentration_metrics()` to src/portfolios.py (latest_max_weight,
 herfindahl_index = sum(w_i^2) from the most recent rebalance, and
@@ -591,3 +578,47 @@ evidence the report needs, gathered without touching any fund's actual
 construction - the weight-cap/shrinkage idea itself is deferred to
 Section 6 as a recommendation rather than implemented, per the scope
 decision above. check_handin.py still passes (22 checks).
+
+---
+
+# Prompt log - splitting growth-of-$1 into one panel per universe
+
+## What I wanted
+Fix a real readability problem in growth_of_dollar.png flagged by review:
+all 9 base funds sharing one linear y-axis meant crypto's much larger
+growth (up to ~10x) compressed equity and combined (both under ~2x) into
+a flat band near the bottom of the chart, on top of a 9-way legend being
+hard to parse.
+
+## Prompt(s)
+- Pasted a review comment: "Figure 1 可能仍然太拥挤...crypto 高增长会压缩
+  equity 和 combined fund 的差异", suggesting three panels (Equity/Crypto/
+  Combined) each comparing the three methods, with a shared legend, or a
+  log scale with explanation.
+
+## What the assistant produced
+Chose the three-panel option over log scale (log would need justifying
+in the report and still visually favours whichever series has the
+smoothest compounding, rather than just fixing the scale mismatch) and
+rebuilt growth_figure() to match the by-universe/by-method pattern
+already used for weights_over_time_figure(): one panel per universe
+(Equity, Crypto, Combined), each with its own y-axis (deliberately NOT
+shared, since forcing one scale across panels would just recreate the
+same crypto-dominates problem one level up), three method-coloured lines
+per panel, one shared legend at the top instead of three separate
+in-plot ones.
+
+## What was wrong or risky
+None found - this is a pure presentation change, the underlying growth
+series are unchanged.
+
+## What I changed and why
+Splitting by universe with independent y-scales let each panel actually
+be read: Equity shows the three methods staying fairly close together
+throughout; Crypto shows Max-Sharpe surging hardest through the 2021
+peak then crashing furthest and never recovering (ending near 1.0,
+essentially flat over 3+ years) while Min-Variance and Risk-Parity both
+recover strongly into 2023; Combined shows Max-Sharpe clearly ahead of
+the other two for almost the entire sample. None of this was visible in
+the single shared-axis version. Re-ran the full pipeline and
+check_handin.py (22 checks) to confirm nothing else broke.

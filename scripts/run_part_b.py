@@ -165,17 +165,49 @@ def save_performance_table(funds: dict) -> pd.DataFrame:
 
 
 def growth_figure(funds: dict):
-    fig, ax = plt.subplots(figsize=(9, 5.5))
-    for name, res in funds.items():
-        if name.endswith("Sentiment Tilt"):
-            continue
-        ax.plot(res["growth"].index, res["growth"].values, label=name, linewidth=1.2)
-    ax.set_title("Growth of $1 - out-of-sample, by fund and method (2021-2023)")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Growth of $1")
-    ax.legend(fontsize=7, ncol=3, loc="upper left")
-    fig.tight_layout()
-    fig.savefig(RESULTS / "figures" / "growth_of_dollar.png", dpi=150)
+    # All 9 base funds on one shared linear axis crowds the plot, and
+    # crypto's much larger growth (up to ~10x) compresses equity/combined
+    # (which stay under ~2x) into an unreadable band near the bottom - the
+    # same "one dominant series drowns the rest" problem as the earlier
+    # weights-over-time and sentiment-index redesigns, just in growth-of-$1
+    # form. Splitting into one panel per universe, each with its OWN y-scale,
+    # fixes both: no more 9-way legend collision, and equity/combined get
+    # to use their own full vertical range instead of crypto's.
+    surface, ink_primary, ink_secondary, ink_muted = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
+    gridline, baseline = "#e1e0d9", "#c3c2b7"
+    method_colors = {"Min-Variance": "#2a78d6", "Max-Sharpe": "#eb6834", "Risk-Parity": "#1baf7a"}
+
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4.6))
+    fig.patch.set_facecolor(surface)
+    fig.subplots_adjust(top=0.78, bottom=0.14, left=0.06, right=0.98, wspace=0.22)
+
+    for ax, universe in zip(axes, UNIVERSES):
+        ax.set_facecolor(surface)
+        for label, color in method_colors.items():
+            res = funds[f"{universe} {label}"]
+            ax.plot(res["growth"].index, res["growth"].values, color=color, linewidth=1.4, label=label, zorder=2)
+        ax.set_title(universe, fontsize=11.5, color=ink_primary, loc="left", pad=6)
+        for spine in ("top", "right"):
+            ax.spines[spine].set_visible(False)
+        for spine in ("left", "bottom"):
+            ax.spines[spine].set_color(baseline)
+        ax.grid(axis="y", color=gridline, linewidth=0.7, zorder=0)
+        ax.set_axisbelow(True)
+        ax.tick_params(colors=ink_muted, labelsize=8)
+        ax.tick_params(axis="x", rotation=30)
+
+    axes[0].set_ylabel("Growth of $1", color=ink_secondary, fontsize=9.5)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper right", bbox_to_anchor=(0.98, 0.99),
+               frameon=False, fontsize=9.5, labelcolor=ink_secondary, ncol=3)
+
+    fig.text(0.06, 0.94, "Growth of $1, out-of-sample, by universe and method (2020-2023)",
+              color=ink_primary, fontsize=13, ha="left", va="top")
+    fig.text(0.06, 0.885, "Each panel has its own vertical scale - Crypto's growth is 3-5x "
+                          "larger than Equity/Combined, so a shared axis would flatten the latter two",
+              color=ink_secondary, fontsize=9, ha="left", va="top")
+
+    fig.savefig(RESULTS / "figures" / "growth_of_dollar.png", dpi=150, facecolor=surface)
     plt.close(fig)
 
 
