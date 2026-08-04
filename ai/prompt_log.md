@@ -792,3 +792,49 @@ truncated text, no overlapping title/subtitle. Re-ran the full pipeline
 and check_handin.py (21 checks - the report.pdf reminder is expected,
 since the actual editable report lives outside this repo while it's being
 drafted) to confirm nothing else broke.
+
+---
+
+# Prompt log - verifying and fixing decimal-place consistency across table images
+
+## What I wanted
+Confirm two things the user asked about directly: (1) that every table
+image is genuinely built from the committed CSVs rather than typed by
+hand, and (2) that decimal precision is consistent across all 5 images.
+
+## Prompt(s)
+- "你再看一下你生层的这几个table都是按照原有csv的基础上生成的吧,然后如果你
+  保留小数点的话再确认一下是不是全都统一保留小数点后三位了" - asked me to
+  re-confirm the tables are CSV-derived and check whether decimal places
+  are uniformly 3dp throughout.
+
+## What the assistant produced
+Confirmed (1) directly from the code: every table in table_images() opens
+with `pd.read_csv(RESULTS / "tables" / ...)`, no hardcoded values. For (2),
+found real inconsistency - different tables used .round(1), .round(2), or
+.round(3) for the same kind of quantity (e.g. Sharpe ratio was 2dp in
+Table 1/B1 but 3dp in Table 3/4). Standardised every percentage, Sharpe
+ratio, effective-N, and HHI value to 3dp.
+
+## What was wrong or risky
+The first fix (calling .round(3) uniformly) did not actually produce
+uniform-looking output - confirmed by re-rendering and looking at the
+images rather than assuming .round(3) was sufficient. Python drops
+trailing zeros converting a rounded float to a string (round(0.32,3) is
+the float 0.32, and str(0.32) is "0.32", not "0.320"), so values that
+happened to round to an exact 1dp or 2dp number (10.69%, 22.11%, 16.02%,
+2.11, 0.32) still displayed with fewer visible digits than values that
+didn't - the same inconsistency the user flagged, just hiding one level
+deeper.
+
+## What I changed and why
+Replaced every `.round(3).astype(str)` / bare `.round(3)` with explicit
+f-string formatting (`.map(lambda x: f"{x:.3f}")` / `f"{x:.3f}%"`), which
+forces exactly 3 digits after the decimal point regardless of trailing
+zeros. Left tilt_strength (Table 4's row label: 0.00/0.25/0.50/1.00) at
+2dp deliberately, since it is a pre-set input parameter, not a measured
+quantity being rounded - flagged this distinction in a code comment rather
+than silently making it 3dp too. Re-rendered all 5 tables and visually
+confirmed every percentage/Sharpe/effective-N/HHI value now shows exactly
+3 digits after the decimal point with no exceptions. Re-ran the full
+pipeline and check_handin.py (21 checks) to confirm nothing else broke.
