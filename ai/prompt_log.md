@@ -490,15 +490,12 @@ against alternatives, so I could not say whether the fusion's roughly-
 neutral result was specific to that one number or a more general pattern.
 
 ## Prompt(s)
-- Pasted a review suggestion: test pre-set tilt strengths (0.25, 0.50,
+- test pre-set tilt strengths (0.25, 0.50,
   1.00), build a robustness table of annualised return/volatility/Sharpe/
   max drawdown/turnover across them, and explicitly warned against
   picking whichever value looks best afterwards and reporting only that
   one, since that would be data snooping - report all of them as a
-  robustness check instead. Asked "你觉得这个有道理吗" (does this make
-  sense) before implementing; after I agreed it was sound and explained
-  why (matches an already-flagged gap, correctly avoids re-optimising on
-  the OOS period), replied "好的" to proceed.
+  robustness check instead. 
 
 ## What the assistant produced
 Added `average_turnover()` to src/portfolios.py (mean one-way turnover
@@ -530,3 +527,67 @@ tested range (more tilt = worse risk-adjusted performance and higher
 turnover), not noise specific to one arbitrary parameter value. Re-ran
 check_handin.py (22 checks, only the pycache reminder) to confirm nothing
 broke.
+
+---
+
+# Prompt log - concentration and turnover diagnostics for the performance table
+
+## What I wanted
+Respond to a review comment flagging that Combined Max-Sharpe's most
+recent holdings are ~64% concentrated in just two names (GE 45.3%, NVDA
+18.7%), with a documented, cited critique (naive mean-variance/max-Sharpe
+optimisation is known to be highly sensitive to noisy historical mean-
+return estimates and prone to corner solutions under long-only
+constraints - Michaud 1989) and a request to add diagnostics (turnover,
+latest max weight, effective N holdings, Herfindahl index) to the
+performance table.
+
+## Prompt(s)
+- Pasted the review comment (theory + the four suggested metrics) with no
+  further instruction.
+- I gave my own assessment before implementing anything: agreed the
+  diagnosis was correct and well-grounded, but flagged that the
+  suggestion's OTHER recommendation - actually capping single-asset
+  weight at 20% or adding covariance/mean shrinkage - would require
+  re-running every fund's optimisation and changing results yet again
+  this late in the process, and asked whether that bigger change was
+  wanted.
+- User asked back: "那加了这个更大的改动之后会比现在更好吗，也就是这个改动
+  是必须的吗" (would the bigger change actually be better, is it
+  necessary). I answered no on both counts - not required by the brief,
+  and not obviously better even on its own terms (constraining max-Sharpe
+  can only hold its Sharpe the same or lower vs the unconstrained
+  optimum, though it might improve genuine out-of-sample robustness by
+  reducing estimation-error overfitting - genuinely ambiguous without
+  actually testing it) - and suggested reporting the diagnostics honestly
+  instead and turning the capping idea into one of Section 6's three
+  required recommendations rather than implementing it now.
+- "那你就按这个改吧，不用做那个大改动了" (do this, skip the bigger
+  change) - confirmed the scoped-down plan.
+
+## What the assistant produced
+Added `concentration_metrics()` to src/portfolios.py (latest_max_weight,
+herfindahl_index = sum(w_i^2) from the most recent rebalance, and
+effective_n_holdings = 1/HHI), and wired both it and the already-built
+`average_turnover()` into save_performance_table() in
+scripts/run_part_b.py, so every fund's row in
+results/tables/performance_metrics.csv now also reports these four
+diagnostics.
+
+## What was wrong or risky
+None - this only reads already-computed weights and adds columns; it does
+not change any fund's actual weights, returns, or backtest results, so
+there was no risk of silently altering numbers already used elsewhere in
+the report.
+
+## What I changed and why
+Ran the full pipeline and confirmed the diagnostics tell a clear, honest
+story that matches the review's original concern: effective N holdings is
+1.4-3.8 for every Max-Sharpe fund (crypto is the most extreme, 1.43 - the
+book is effectively betting on barely more than one name) versus 8.8-9.6
+for Min-Variance funds and 44.6-51.1 for Risk-Parity funds, which are
+genuinely well-diversified. This is exactly the concentration-risk
+evidence the report needs, gathered without touching any fund's actual
+construction - the weight-cap/shrinkage idea itself is deferred to
+Section 6 as a recommendation rather than implemented, per the scope
+decision above. check_handin.py still passes (22 checks).

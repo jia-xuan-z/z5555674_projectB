@@ -172,6 +172,23 @@ def average_turnover(weights: pd.DataFrame) -> float:
     return float(0.5 * diffs.mean())
 
 
+def concentration_metrics(weights: pd.DataFrame) -> dict:
+    """Concentration diagnostics from the most recent rebalance's weights:
+    latest_max_weight (the single largest holding), herfindahl_index (HHI =
+    sum(w_i^2), higher = more concentrated; 1/N for an equal-weight book),
+    and effective_n_holdings (1/HHI, the number of EQUAL-sized positions
+    that would give the same concentration - e.g. 2.0 means "as concentrated
+    as holding exactly 2 names equally", however many names are actually
+    nonzero). These describe the CURRENT book only, not a history."""
+    latest = weights.iloc[-1]
+    hhi = float((latest ** 2).sum())
+    return {
+        "latest_max_weight": float(latest.max()),
+        "herfindahl_index": hhi,
+        "effective_n_holdings": float(1.0 / hhi) if hhi > 0 else float("nan"),
+    }
+
+
 def performance_metrics(daily_returns: pd.Series, periods_per_year: int = 252, rf: float = 0.0) -> dict:
     """Annualised return, annualised volatility, Sharpe, and max drawdown.
 

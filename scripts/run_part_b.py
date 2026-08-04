@@ -141,12 +141,24 @@ def save_required_csvs(funds: dict):
 
 
 def save_performance_table(funds: dict) -> pd.DataFrame:
+    # Concentration/turnover diagnostics added after a review flagged Combined
+    # Max-Sharpe's ~64% weight in its top 2 holdings (GE + NVDA) - a known
+    # failure mode of naive mean-variance optimisation (max-Sharpe is highly
+    # sensitive to noisy historical mean-return estimates and long-only
+    # constraints push that sensitivity into corner solutions), not a bug.
+    # Reporting these numbers rather than acting on them (e.g. capping any
+    # single weight): a cap changes every fund's actual weights and results,
+    # which is a bigger, riskier change this late - the diagnostics let the
+    # report state the risk honestly and turn it into a concrete
+    # recommendation (Section 6) instead.
     rows = []
     for name, res in funds.items():
         universe = name.split(" ")[0] if name.split(" ")[0] in UNIVERSE_PERIODS else "Equity"
         ppy = UNIVERSE_PERIODS.get(universe, 252)
         m = portfolios.performance_metrics(res["daily_returns"], periods_per_year=ppy)
-        rows.append({"fund": name, "periods_per_year": ppy, **m})
+        c = portfolios.concentration_metrics(res["weights"])
+        t = portfolios.average_turnover(res["weights"])
+        rows.append({"fund": name, "periods_per_year": ppy, **m, "avg_turnover": t, **c})
     table = pd.DataFrame(rows)
     table.to_csv(RESULTS / "tables" / "performance_metrics.csv", index=False)
     return table
