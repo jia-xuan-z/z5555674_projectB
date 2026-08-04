@@ -591,10 +591,12 @@ a flat band near the bottom of the chart, on top of a 9-way legend being
 hard to parse.
 
 ## Prompt(s)
-- Pasted a review comment: "Figure 1 可能仍然太拥挤...crypto 高增长会压缩
-  equity 和 combined fund 的差异", suggesting three panels (Equity/Crypto/
-  Combined) each comparing the three methods, with a shared legend, or a
-  log scale with explanation.
+- may be difficult to read due to the clutter, and the high growth of crypto may obscure the differences between equity and combined funds.
+Consider the following:
+Three panels: Equity, Crypto, and Combined;
+Compare the three methods within each panel;
+Maintain a consistent legend and clearly indicate the sample period;
+Or use a log scale, but be sure to explain it clearly.
 
 ## What the assistant produced
 Chose the three-panel option over log scale (log would need justifying
@@ -622,3 +624,53 @@ recover strongly into 2023; Combined shows Max-Sharpe clearly ahead of
 the other two for almost the entire sample. None of this was visible in
 the single shared-axis version. Re-ran the full pipeline and
 check_handin.py (22 checks) to confirm nothing else broke.
+
+---
+
+# Prompt log - app risk disclosures and fact-sheet methodology fields
+
+## What I wanted
+Add standard investment-product disclosures and extra methodology fields
+to the Streamlit fact sheet, per a review suggestion, without recomputing
+anything - the app already has every number needed (first live date is
+the growth series' own start date, concentration is the diagnostics just
+added to performance_metrics.csv, window/rebalance are pipeline
+constants).
+
+## Prompt(s)
+- Pasted a review comment: current app covers the full investor journey
+  (compare/fact sheet/allocation/sentiment) but as an investment product
+  should add short disclosures (backtested != actual performance, past
+  performance doesn't guarantee future results, costs/taxes/fees
+  excluded, crypto materially riskier, sentiment is headline-only) and
+  extra fact-sheet fields (first live backtest date, estimation window,
+  rebalance frequency, current concentration, asset-class label).
+
+## What the assistant produced
+A collapsed `st.expander("Important disclosures")` under the title with
+the five suggested bullet points, and one extra caption line on the fact
+sheet showing asset class (parsed from the fund name), first live date
+(the growth series' own earliest date), estimation window and rebalance
+frequency (pipeline constants, same for every fund), and current
+concentration (largest holding % and effective N holdings, both already
+computed by the concentration diagnostics added earlier).
+
+## What was wrong or risky
+Testing this locally hit a flaky repeat of an earlier issue: the first
+browser tab's `get_page_text` kept returning an empty body for the outer
+Streamlit Cloud-style wrapper page even after 20+ seconds of waiting,
+despite all JS/CSS assets loading with 200s and no console errors. Opening
+a completely fresh browser tab and navigating there resolved it
+immediately. Not a bug in the app - a rendering/connection quirk in the
+first tab - but worth remembering rather than assuming the app itself was
+broken.
+
+## What I changed and why
+No logic changes to any fund's data - purely additive UI/text. Verified
+in the fresh tab: the disclosures expander opens and shows all five
+bullets, and the fact sheet caption correctly shows, e.g. for Combined
+Max-Sharpe: "Asset class: Combined | First live date: 2021-01-04 |
+Estimation window: 252 trading days, rolled forward | Rebalance: monthly
+| Current concentration: largest holding 45.3%, effective 3.8 equal-sized
+holdings" - matching the numbers already verified in
+performance_metrics.csv. check_handin.py still passes (22 checks).

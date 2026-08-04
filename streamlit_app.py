@@ -63,6 +63,17 @@ def current_holdings(fund_name: str, top_n: int = 10) -> pd.DataFrame:
 st.title("SentiFolio")
 st.caption("Systematically managed equity, crypto, and combined funds, with a news-sentiment index across equity sectors.")
 
+with st.expander("Important disclosures"):
+    st.markdown(
+        "- Backtested performance is not actual performance - no money was invested and no trades were placed.\n"
+        "- Past performance, backtested or actual, does not guarantee future results.\n"
+        "- Transaction costs, taxes, and management fees are excluded from every figure shown here.\n"
+        "- Crypto funds involve materially higher volatility and drawdown risk than equity funds - "
+        "see each fund's fact sheet.\n"
+        "- Sentiment is based on news headlines only, scored automatically - it is a noisy proxy for "
+        "market mood, not a verified signal."
+    )
+
 tab_funds, tab_sentiment, tab_allocate = st.tabs(["Funds", "Sentiment", "Build a portfolio"])
 
 with tab_funds:
@@ -92,6 +103,15 @@ with tab_funds:
     c2.metric("Annualised volatility", f"{metrics_row['annualised_volatility']*100:.2f}%")
     c3.metric("Sharpe ratio", f"{metrics_row['sharpe_ratio']:.2f}")
     c4.metric("Max drawdown", f"{metrics_row['max_drawdown']*100:.2f}%")
+
+    asset_class = fund_choice.split(" ")[0]
+    first_live = growth.index.min().date()
+    st.caption(
+        f"**Asset class:** {asset_class}  |  **First live date:** {first_live}  |  "
+        f"**Estimation window:** 252 trading days, rolled forward  |  **Rebalance:** monthly  |  "
+        f"**Current concentration:** largest holding {metrics_row['latest_max_weight']*100:.1f}%, "
+        f"effective {metrics_row['effective_n_holdings']:.1f} equal-sized holdings"
+    )
 
     col_left, col_right = st.columns(2)
     with col_left:
