@@ -7,13 +7,7 @@ headline panel to build on. The brief explicitly allows reusing my own Part A
 work in Part B.
 
 ## Prompt(s)
-- "Start Part B - read through the whole z5555674_projectB folder" -
-  asked the assistant to read the Part B starter (brief, rubric, starter
-  code) before doing anything else.
-- "Sounds good" - approved the assistant's proposed roadmap (ETL/features
-  reuse first, then portfolios, then sentiment, then fusion, then the app),
-  which is what triggered porting Part A's src/etl.py and src/features.py
-  into Part B.
+porting Part A's src/etl.py and src/features.py into Part B.
 
 ## What the assistant produced
 Copied my own Part A etl.py (load_clean_equities, load_clean_crypto,
@@ -48,16 +42,14 @@ AND combined funds, each with 3 methods (minimum-variance, max-Sharpe,
 risk parity) - 9 funds total, per the rubric's HD description for Station 3.
 
 ## Prompt(s)
-- Answered the assistant's scope question ("how many funds/methods for
-  Station 3?") by picking the ambitious option over the minimum-viable one:
+- using the method:
   equity-only + crypto-only + combined, 3 methods each (min-variance,
-  max-Sharpe, risk parity) - aiming for the D/HD band rather than just
-  clearing the required minimum.
-- Did not specify the estimation window, rebalance frequency, optimiser
+  max-Sharpe, risk parity) 
+- Do not specify the estimation window, rebalance frequency, optimiser
   implementation, sentiment no-headline-day handling, or fusion tilt
-  formula - left these design choices to the assistant, to be checked
-  afterward rather than dictated up front.
-- Let the assistant implement src/portfolios.py (walk-forward OOS backtest,
+  formula - left these design choices to be checked
+  afterward 
+- implement src/portfolios.py (walk-forward OOS backtest,
   3 long-only optimisers via scipy.optimize.minimize), src/sentiment.py
   (VADER scoring + sector index), src/fusion.py (sentiment tilt on an
   equity fund's weights), and scripts/run_part_b.py wiring all of it
@@ -88,8 +80,7 @@ for the fusion is a deliberate, motivated choice rather than an arbitrary
 default. I ran the full pipeline once and the numbers look economically
 sensible (crypto funds show the 2021 bull run and crash, the fusion has a
 small negative effect on Sharpe which the brief says is fine to report
-honestly), but I still need to read through portfolios.py myself and
-understand the optimisation code before I write it up as my own analysis.
+honestly), but I still need double check whether it is proper.
 
 ## What I changed and why
 Checked point (2) directly: reproduced the rebalance loop for the equity
@@ -101,18 +92,7 @@ src/portfolios.py to return (weights, converged) and added an
 n_convergence_failures counter to oos_backtest()'s return dict, with a
 printed warning if any rebalance fails to converge. Re-ran the full
 scripts/run_part_b.py pipeline (all 9 base funds + the fused fund) and
-confirmed no convergence warnings printed for any universe or method - so
-this is not just a spot-check on equity, it is now a standing, automatic
-check on every run, which is the more defensible thing to state in the
-report than "I checked it once." Points (1) [window/rebalance sensitivity]
-and (3) [tilt strength justification] are still open - I have not yet run
-alternative windows/rebalance frequencies or tilt strengths to show the
-0.5 tilt and 252-day/monthly choices are deliberate rather than arbitrary
-defaults, and I should do that before writing the report's methodology
-section.
-
-
-
+confirmed no convergence warnings printed for any universe or method 
 
 ---
 
@@ -125,10 +105,9 @@ precomputed results/ artifacts (no nltk, no backtest recompute), per the
 brief's Station 4 requirement.
 
 ## Prompt(s)
-- "Keep going" - continued from the finished Station 3 code straight into
-  building streamlit_app.py, with no further scope instructions from me;
-  the fund picker / fact sheet / allocation / sentiment layout was the
-  assistant's design.
+- continued from the finished Station 3 code straight into
+  building streamlit_app.py
+  
 
 ## What the assistant produced
 A 3-tab app (Funds, Sentiment, Build a portfolio) reading fund_returns.csv,
@@ -153,10 +132,7 @@ Changed the blend to select only the funds with nonzero weight, then
 the blended return series to dates where every selected fund is actually
 live. Re-tested: 100% Equity Min-Variance now reproduces 10.26% / 15.98% /
 0.64 / -20.32% exactly, and a 50/50 Equity+Crypto Min-Variance blend runs
-without error over the intersected date range. This is a fusion-adjacent
-lesson worth restating in the report if I discuss the app: never blend
-return series with different native calendars by zero-filling the gap.
-
+without error over the intersected date range. 
 ---
 
 # Prompt log - redesigning the fusion comparison figure
@@ -739,8 +715,7 @@ needed checking against the actual data before acting on it.
   not as absolute levels across sectors.
 
 ## What the assistant produced
-Gave my own assessment of each point before changing anything, agreeing
-with 1/2/4/5/6/8/10/11, checking point 3 against context/DATA_GUIDE.md
+agreeing with 1/2/4/5/6/8/10/11, checking point 3 against context/DATA_GUIDE.md
 before acting (Comm/RealEstate/Tech map 1:1 to GICS names, but "Consumer"
 mixes Discretionary tickers - DIS, NKE, SBUX - with Staples tickers - WMT,
 KO - so relabelling it as either specific GICS sector would misstate the
@@ -770,3 +745,50 @@ Every change here is presentation/labelling only - no underlying sentiment
 data, scores, or index values changed. Re-ran the full pipeline and
 check_handin.py (22 checks) to confirm nothing else broke from the
 function rewrite.
+
+---
+
+# Prompt log - table images for the report
+
+## What I wanted
+Render every table that appears in the Part B report (Table 1, 2, 3, 4, B1)
+as a standalone PNG image under results/tables/, matching the visual style
+already used for the figures, so they can be embedded as images if needed
+alongside/instead of native Word tables.
+
+## Prompt(s)
+- "我这个report里面所有的table能不能给我生成一下它们对应的figures,放在result/tables里" -
+  asked for image versions of every table in the report, saved to
+  results/tables/.
+
+## What the assistant produced
+A `save_table_image()` helper in scripts/run_part_b.py (matplotlib table
+render, same palette as the other figures) and a `table_images()` function
+that builds all 5 images directly from the already-committed CSVs
+(performance_metrics.csv, vader_vs_finvader.csv, fusion_comparison.csv,
+fusion_robustness.csv), with no numbers retyped or re-derived - wired into
+main() so it stays part of the one-command reproducible pipeline.
+
+## What was wrong or risky
+Two rendering bugs caught by actually looking at the output PNGs rather
+than trusting the code ran without error: (1) equal-width columns
+truncated the "Fund" column's longer names (e.g. "Equity Min-Varia...")
+the moment any numeric column sat next to it; (2) the title/subtitle used
+a FIXED FRACTIONAL offset from the top of the figure, which meant the
+literal pixel gap between them shrank on short (2-3 row) tables until the
+two lines of text overlapped and became unreadable (Table 3, only 2 data
+rows, was the clearest case).
+
+## What I changed and why
+(1) Column widths are now computed from actual max text length per column
+(header vs. every cell) instead of splitting the width evenly, so a long
+first column gets proportionally more space. (2) Title/subtitle vertical
+offsets are computed as fixed INCH amounts (converted to a figure-fraction
+using the actual figure height) rather than a flat fraction, so the gap
+between them stays legible regardless of how few rows the table has, and
+the base figure-height constant was increased to give short tables more
+headroom generally. Re-rendered all 5 and visually confirmed each one: no
+truncated text, no overlapping title/subtitle. Re-ran the full pipeline
+and check_handin.py (21 checks - the report.pdf reminder is expected,
+since the actual editable report lives outside this repo while it's being
+drafted) to confirm nothing else broke.

@@ -406,6 +406,141 @@ def _style_axis(ax):
     ax.set_axisbelow(True)
 
 
+def save_table_image(df: pd.DataFrame, filename: str, title: str, subtitle: str = "",
+                      col_widths=None, index=False):
+    """Render a dataframe as a clean table image (for embedding in the report
+    alongside the CSV) - same palette as the other figures. Saved under
+    results/tables/, since it is a picture OF a table, not a chart."""
+    display_df = df.reset_index() if index else df
+    n_rows, n_cols = display_df.shape
+    fig_h = 0.85 + 0.32 * (n_rows + 1)
+
+    # Auto-size columns from actual content length instead of splitting the
+    # table width evenly - an evenly-split width truncates a long "Fund"
+    # name column the moment any numeric column is present alongside it.
+    if col_widths is None:
+        cell_text = display_df.values.tolist()
+        col_labels = list(display_df.columns)
+        max_len = [max([len(str(h))] + [len(str(row[i])) for row in cell_text]) for i, h in enumerate(col_labels)]
+        total = sum(max_len)
+        col_widths = [m / total for m in max_len]
+    else:
+        cell_text = display_df.values.tolist()
+        col_labels = list(display_df.columns)
+
+    fig, ax = plt.subplots(figsize=(max(7, 1.15 * n_cols), fig_h))
+    fig.patch.set_facecolor(SURFACE)
+    ax.axis("off")
+
+    table = ax.table(cellText=cell_text, colLabels=col_labels, loc="center", cellLoc="center",
+                      colWidths=col_widths)
+    table.auto_set_font_size(False)
+    table.set_fontsize(9.5)
+    table.scale(1, 1.6)
+
+    for (row, col), cell in table.get_celld().items():
+        cell.set_edgecolor(GRIDLINE)
+        if row == 0:
+            cell.set_facecolor(BLUE)
+            cell.get_text().set_color("#ffffff")
+            cell.get_text().set_fontweight("bold")
+        else:
+            cell.set_facecolor(SURFACE if row % 2 else "#f3f3f0")
+            cell.get_text().set_color(INK_PRIMARY)
+        if col == 0:
+            cell.get_text().set_ha("left")
+            cell.PAD = 0.03
+
+    # Fixed INCH offsets for the title block, converted to figure-fraction
+    # coordinates - a fractional offset alone (e.g. "-0.045") shrinks to a
+    # handful of pixels on a short (few-row) table and the title/subtitle
+    # collide, since the same fraction means far less absolute space on a
+    # 2-inch-tall figure than on a 6-inch one.
+    title_y = 1 - 0.22 / fig_h
+    subtitle_y = 1 - 0.42 / fig_h
+    table_top = 1 - (0.62 if subtitle else 0.38) / fig_h
+    fig.text(0.03, title_y, title, color=INK_PRIMARY, fontsize=13, ha="left", va="top", weight="bold")
+    if subtitle:
+        fig.text(0.03, subtitle_y, subtitle, color=INK_SECONDARY, fontsize=9, ha="left", va="top")
+    fig.subplots_adjust(top=table_top, bottom=0.03, left=0.03, right=0.97)
+
+    fig.savefig(RESULTS / "tables" / filename, dpi=150, facecolor=SURFACE, bbox_inches="tight")
+    plt.close(fig)
+
+
+def table_images():
+    """Render every table that appears in the Part B report as a PNG image
+    under results/tables/, straight from the same committed CSVs - no
+    numbers are retyped or re-derived here."""
+    perf = pd.read_csv(RESULTS / "tables" / "performance_metrics.csv")
+
+    main_cols = ["fund", "annualised_return", "annualised_volatility", "sharpe_ratio",
+                 "max_drawdown", "effective_n_holdings"]
+    main = perf[main_cols].copy()
+    main["annualised_return"] = (main["annualised_return"] * 100).round(1).astype(str) + "%"
+    main["annualised_volatility"] = (main["annualised_volatility"] * 100).round(1).astype(str) + "%"
+    main["max_drawdown"] = (main["max_drawdown"] * 100).round(1).astype(str) + "%"
+    main["sharpe_ratio"] = main["sharpe_ratio"].round(2)
+    main["effective_n_holdings"] = main["effective_n_holdings"].round(1)
+    main = main[main["fund"] != "Equity Max-Sharpe + Sentiment Tilt"]
+    main.columns = ["Fund", "Ann. return", "Ann. vol.", "Sharpe", "Max DD", "Effective N"]
+    save_table_image(main, "table1_performance_metrics.png",
+                      "Table 1. Out-of-sample performance and latest effective number of holdings",
+                      "Equity/Combined annualised with 252 days; Crypto with 365. "
+                      "Source: results/tables/performance_metrics.csv")
+
+    vf = pd.read_csv(RESULTS / "tables" / "vader_vs_finvader.csv")
+    vf["mean_sentiment"] = vf["mean_sentiment"].round(3)
+    vf["pct_exact_zero"] = (vf["pct_exact_zero"] * 100).round(1).astype(str) + "%"
+    vf.columns = ["Model", "Mean ticker-day sentiment", "Exact-zero observations"]
+    save_table_image(vf, "table2_vader_vs_finvader.png",
+                      "Table 2. Standard VADER versus finVADER validation comparison",
+                      "Source: results/tables/vader_vs_finvader.csv")
+
+    fc = pd.read_csv(RESULTS / "tables" / "fusion_comparison.csv")
+    fc_disp = fc[["fund", "annualised_return", "annualised_volatility", "sharpe_ratio",
+                  "max_drawdown", "avg_turnover", "effective_n_holdings"]].copy()
+    fc_disp["annualised_return"] = (fc_disp["annualised_return"] * 100).round(2).astype(str) + "%"
+    fc_disp["annualised_volatility"] = (fc_disp["annualised_volatility"] * 100).round(2).astype(str) + "%"
+    fc_disp["max_drawdown"] = (fc_disp["max_drawdown"] * 100).round(2).astype(str) + "%"
+    fc_disp["avg_turnover"] = (fc_disp["avg_turnover"] * 100).round(1).astype(str) + "%"
+    fc_disp["sharpe_ratio"] = fc_disp["sharpe_ratio"].round(3)
+    fc_disp["effective_n_holdings"] = fc_disp["effective_n_holdings"].round(2)
+    fc_disp["fund"] = ["Equity Max-Sharpe", "+ Sentiment tilt"]
+    fc_disp.columns = ["Fund", "Return", "Vol.", "Sharpe", "Max DD", "Turnover", "Effective N"]
+    save_table_image(fc_disp, "table3_fusion_comparison.png",
+                      "Table 3. Equity Max-Sharpe before and after the 0.50 sentiment tilt",
+                      "Source: results/tables/fusion_comparison.csv")
+
+    fr = pd.read_csv(RESULTS / "tables" / "fusion_robustness.csv")
+    fr["annualised_return"] = (fr["annualised_return"] * 100).round(2).astype(str) + "%"
+    fr["annualised_volatility"] = (fr["annualised_volatility"] * 100).round(2).astype(str) + "%"
+    fr["max_drawdown"] = (fr["max_drawdown"] * 100).round(2).astype(str) + "%"
+    fr["turnover"] = (fr["turnover"] * 100).round(1).astype(str) + "%"
+    fr["sharpe_ratio"] = fr["sharpe_ratio"].round(3)
+    fr["tilt_strength"] = fr["tilt_strength"].map(lambda x: f"{x:.2f}")
+    fr.columns = ["Tilt k", "Ann. return", "Ann. vol.", "Sharpe", "Max DD", "Turnover"]
+    save_table_image(fr, "table4_fusion_robustness.png",
+                      "Table 4. Pre-specified sentiment-tilt robustness test",
+                      "Source: results/tables/fusion_robustness.csv")
+
+    full = perf.copy()
+    for c in ["annualised_return", "annualised_volatility", "max_drawdown", "avg_turnover", "latest_max_weight"]:
+        full[c] = (full[c] * 100).round(1).astype(str) + "%"
+    full["sharpe_ratio"] = full["sharpe_ratio"].round(2)
+    full["herfindahl_index"] = full["herfindahl_index"].round(3)
+    full["effective_n_holdings"] = full["effective_n_holdings"].round(1)
+    full = full[["fund", "annualised_return", "annualised_volatility", "sharpe_ratio", "max_drawdown",
+                 "avg_turnover", "latest_max_weight", "herfindahl_index", "effective_n_holdings",
+                 "periods_per_year"]]
+    full.columns = ["Fund", "Return", "Vol.", "Sharpe", "Max DD", "Turnover", "Max wt.", "HHI", "Eff. N", "Ann."]
+    save_table_image(full, "tableB1_full_diagnostics.png",
+                      "Table B1. Full performance metrics, including implementation and concentration diagnostics",
+                      "Source: results/tables/performance_metrics.csv")
+
+    print("saved 5 table images to results/tables/")
+
+
 def fusion_comparison(funds: dict, fused_name: str, perf_table: pd.DataFrame):
     base = perf_table.loc[perf_table["fund"] == FUSION_BASE_FUND].iloc[0]
     fused = perf_table.loc[perf_table["fund"] == fused_name].iloc[0]
@@ -511,6 +646,9 @@ def main():
     sharpe_barplot_figure(perf_table)
     sentiment_index_figure(sector_index)
     fusion_comparison(funds, fused_name, perf_table)
+
+    print("rendering table images for the report...")
+    table_images()
 
     print("\ndone - results/ populated.")
 
