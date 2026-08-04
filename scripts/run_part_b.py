@@ -477,11 +477,11 @@ def table_images():
     main_cols = ["fund", "annualised_return", "annualised_volatility", "sharpe_ratio",
                  "max_drawdown", "effective_n_holdings"]
     main = perf[main_cols].copy()
-    main["annualised_return"] = (main["annualised_return"] * 100).map(lambda x: f"{x:.3f}%")
-    main["annualised_volatility"] = (main["annualised_volatility"] * 100).map(lambda x: f"{x:.3f}%")
-    main["max_drawdown"] = (main["max_drawdown"] * 100).map(lambda x: f"{x:.3f}%")
-    main["sharpe_ratio"] = main["sharpe_ratio"].map(lambda x: f"{x:.3f}")
-    main["effective_n_holdings"] = main["effective_n_holdings"].map(lambda x: f"{x:.3f}")
+    main["annualised_return"] = (main["annualised_return"] * 100).round(1).astype(str) + "%"
+    main["annualised_volatility"] = (main["annualised_volatility"] * 100).round(1).astype(str) + "%"
+    main["max_drawdown"] = (main["max_drawdown"] * 100).round(1).astype(str) + "%"
+    main["sharpe_ratio"] = main["sharpe_ratio"].round(2)
+    main["effective_n_holdings"] = main["effective_n_holdings"].round(1)
     main = main[main["fund"] != "Equity Max-Sharpe + Sentiment Tilt"]
     main.columns = ["Fund", "Ann. return", "Ann. vol.", "Sharpe", "Max DD", "Effective N"]
     save_table_image(main, "table1_performance_metrics.png",
@@ -489,8 +489,8 @@ def table_images():
                       "Equity/Combined annualised with 252 days; Crypto with 365")
 
     vf = pd.read_csv(RESULTS / "tables" / "vader_vs_finvader.csv")
-    vf["mean_sentiment"] = vf["mean_sentiment"].map(lambda x: f"{x:.3f}")
-    vf["pct_exact_zero"] = (vf["pct_exact_zero"] * 100).map(lambda x: f"{x:.3f}%")
+    vf["mean_sentiment"] = vf["mean_sentiment"].round(3)
+    vf["pct_exact_zero"] = (vf["pct_exact_zero"] * 100).round(1).astype(str) + "%"
     vf.columns = ["Model", "Mean ticker-day sentiment", "Exact-zero observations"]
     save_table_image(vf, "table2_vader_vs_finvader.png",
                       "Table 2. Standard VADER versus finVADER validation comparison")
@@ -498,27 +498,24 @@ def table_images():
     fc = pd.read_csv(RESULTS / "tables" / "fusion_comparison.csv")
     fc_disp = fc[["fund", "annualised_return", "annualised_volatility", "sharpe_ratio",
                   "max_drawdown", "avg_turnover", "latest_max_weight", "effective_n_holdings"]].copy()
-    fc_disp["annualised_return"] = (fc_disp["annualised_return"] * 100).map(lambda x: f"{x:.3f}%")
-    fc_disp["annualised_volatility"] = (fc_disp["annualised_volatility"] * 100).map(lambda x: f"{x:.3f}%")
-    fc_disp["max_drawdown"] = (fc_disp["max_drawdown"] * 100).map(lambda x: f"{x:.3f}%")
-    fc_disp["avg_turnover"] = (fc_disp["avg_turnover"] * 100).map(lambda x: f"{x:.3f}%")
-    fc_disp["latest_max_weight"] = (fc_disp["latest_max_weight"] * 100).map(lambda x: f"{x:.3f}%")
-    fc_disp["sharpe_ratio"] = fc_disp["sharpe_ratio"].map(lambda x: f"{x:.3f}")
-    fc_disp["effective_n_holdings"] = fc_disp["effective_n_holdings"].map(lambda x: f"{x:.3f}")
+    fc_disp["annualised_return"] = (fc_disp["annualised_return"] * 100).round(2).astype(str) + "%"
+    fc_disp["annualised_volatility"] = (fc_disp["annualised_volatility"] * 100).round(2).astype(str) + "%"
+    fc_disp["max_drawdown"] = (fc_disp["max_drawdown"] * 100).round(2).astype(str) + "%"
+    fc_disp["avg_turnover"] = (fc_disp["avg_turnover"] * 100).round(1).astype(str) + "%"
+    fc_disp["latest_max_weight"] = (fc_disp["latest_max_weight"] * 100).round(1).astype(str) + "%"
+    fc_disp["sharpe_ratio"] = fc_disp["sharpe_ratio"].round(3)
+    fc_disp["effective_n_holdings"] = fc_disp["effective_n_holdings"].round(2)
     fc_disp["fund"] = ["Equity Max-Sharpe", "+ Sentiment tilt"]
     fc_disp.columns = ["Fund", "Return", "Vol.", "Sharpe", "Max DD", "Turnover", "Max wt.", "Effective N"]
     save_table_image(fc_disp, "table3_fusion_comparison.png",
                       "Table 3. Equity Max-Sharpe before and after the 0.50 sentiment tilt")
 
     fr = pd.read_csv(RESULTS / "tables" / "fusion_robustness.csv")
-    fr["annualised_return"] = (fr["annualised_return"] * 100).map(lambda x: f"{x:.3f}%")
-    fr["annualised_volatility"] = (fr["annualised_volatility"] * 100).map(lambda x: f"{x:.3f}%")
-    fr["max_drawdown"] = (fr["max_drawdown"] * 100).map(lambda x: f"{x:.3f}%")
-    fr["turnover"] = (fr["turnover"] * 100).map(lambda x: f"{x:.3f}%")
-    fr["sharpe_ratio"] = fr["sharpe_ratio"].map(lambda x: f"{x:.3f}")
-    # tilt_strength is a pre-set parameter value (0, 0.25, 0.5, 1.0), not a
-    # measured/rounded quantity, so it keeps 2dp (its own exact precision)
-    # rather than being forced to match the other columns' 3dp.
+    fr["annualised_return"] = (fr["annualised_return"] * 100).round(2).astype(str) + "%"
+    fr["annualised_volatility"] = (fr["annualised_volatility"] * 100).round(2).astype(str) + "%"
+    fr["max_drawdown"] = (fr["max_drawdown"] * 100).round(2).astype(str) + "%"
+    fr["turnover"] = (fr["turnover"] * 100).round(1).astype(str) + "%"
+    fr["sharpe_ratio"] = fr["sharpe_ratio"].round(3)
     fr["tilt_strength"] = fr["tilt_strength"].map(lambda x: f"{x:.2f}")
     fr.columns = ["Tilt k", "Ann. return", "Ann. vol.", "Sharpe", "Max DD", "Turnover"]
     save_table_image(fr, "table4_fusion_robustness.png",
@@ -526,10 +523,10 @@ def table_images():
 
     full = perf.copy()
     for c in ["annualised_return", "annualised_volatility", "max_drawdown", "avg_turnover", "latest_max_weight"]:
-        full[c] = (full[c] * 100).map(lambda x: f"{x:.3f}%")
-    full["sharpe_ratio"] = full["sharpe_ratio"].map(lambda x: f"{x:.3f}")
-    full["herfindahl_index"] = full["herfindahl_index"].map(lambda x: f"{x:.3f}")
-    full["effective_n_holdings"] = full["effective_n_holdings"].map(lambda x: f"{x:.3f}")
+        full[c] = (full[c] * 100).round(1).astype(str) + "%"
+    full["sharpe_ratio"] = full["sharpe_ratio"].round(2)
+    full["herfindahl_index"] = full["herfindahl_index"].round(3)
+    full["effective_n_holdings"] = full["effective_n_holdings"].round(1)
     full = full[["fund", "annualised_return", "annualised_volatility", "sharpe_ratio", "max_drawdown",
                  "avg_turnover", "latest_max_weight", "herfindahl_index", "effective_n_holdings",
                  "periods_per_year"]]
