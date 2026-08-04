@@ -149,30 +149,37 @@ def drawdown_figure(funds: dict, fund_name: str = "Combined Max-Sharpe"):
     plt.close(fig)
 
 
-def weights_over_time_figure(funds: dict, fund_name: str = "Equity Min-Variance", top_n: int = 8):
-    # A single shared axis with 8 crossing lines has two problems: an in-plot
-    # legend inevitably sits on top of some line's peak, and with 8 hues two
-    # of them (GILD red / T orange) sit close enough to be hard to tell apart
-    # right where lines cross. Small multiples - the same fix already used for
-    # the sentiment index - sidesteps both: no legend competing for plot area
-    # (each panel is titled with its own ticker) and no cross-line colour
-    # confusion (each ticker only has to be told apart from a flat zero line).
+def weights_over_time_figure(funds: dict, universe: str = "Equity", n_tickers: int = 6):
+    # The brief asks for weights over time ACROSS METHODS for one fund/
+    # universe - not across holdings within one method (an earlier version
+    # of this figure compared the 8 largest holdings under a single method,
+    # which does not answer that). Comparing methods only makes sense
+    # ticker by ticker (one method's weight in isolation says nothing about
+    # another method), so this is small multiples of TICKERS, each panel
+    # overlaying all three methods' weight for that one name - the panels
+    # are chosen as the tickers where the three methods disagree most (by
+    # max-minus-min average weight), since a ticker all three methods treat
+    # the same way has nothing to show.
     surface, ink_primary, ink_secondary, ink_muted = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
-    gridline, baseline, blue = "#e1e0d9", "#c3c2b7", "#2a78d6"
+    gridline, baseline = "#e1e0d9", "#c3c2b7"
+    method_colors = {"Min-Variance": "#2a78d6", "Max-Sharpe": "#eb6834", "Risk-Parity": "#1baf7a"}
 
-    w = funds[fund_name]["weights"] * 100
-    avg_w = w.mean().sort_values(ascending=False)
-    top_tickers = avg_w.head(top_n).index.tolist()
-    other_share = 100 - w[top_tickers].sum(axis=1).mean()
-    y_max = w[top_tickers].max().max()
+    method_weights = {label: funds[f"{universe} {label}"]["weights"] * 100 for label in METHOD_LABELS.values()}
+    avg_by_method = pd.DataFrame({label: w.mean() for label, w in method_weights.items()})
+    spread = avg_by_method.max(axis=1) - avg_by_method.min(axis=1)
+    tickers = spread.sort_values(ascending=False).head(n_tickers).index.tolist()
+    y_max = max(w[tickers].max().max() for w in method_weights.values())
 
-    fig, axes = plt.subplots(2, 4, figsize=(12, 5.2), sharex=True, sharey=True)
+    ncols = 3
+    nrows = -(-n_tickers // ncols)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(12, 3.2 * nrows), sharex=True, sharey=True)
     fig.patch.set_facecolor(surface)
-    fig.subplots_adjust(top=0.82, bottom=0.13, left=0.06, right=0.98, hspace=0.5, wspace=0.12)
+    fig.subplots_adjust(top=0.80, bottom=0.13, left=0.06, right=0.98, hspace=0.5, wspace=0.12)
 
-    for ax, ticker in zip(axes.flat, top_tickers):
+    for ax, ticker in zip(np.atleast_1d(axes).flat, tickers):
         ax.set_facecolor(surface)
-        ax.plot(w.index, w[ticker].values, color=blue, linewidth=1.6, zorder=2)
+        for label, w in method_weights.items():
+            ax.plot(w.index, w[ticker].values, color=method_colors[label], linewidth=1.5, label=label, zorder=2)
         ax.set_ylim(-y_max * 0.05, y_max * 1.08)
         ax.set_title(ticker, fontsize=10.5, color=ink_primary, loc="left", pad=4)
         for spine in ("top", "right"):
@@ -184,14 +191,17 @@ def weights_over_time_figure(funds: dict, fund_name: str = "Equity Min-Variance"
         ax.tick_params(colors=ink_muted, labelsize=7)
         ax.tick_params(axis="x", rotation=45)
 
-    for row in range(axes.shape[0]):
-        axes[row, 0].set_ylabel("Weight (%)", color=ink_secondary, fontsize=8.5)
+    axes2d = np.atleast_2d(axes)
+    for row in range(axes2d.shape[0]):
+        axes2d[row, 0].set_ylabel("Weight (%)", color=ink_secondary, fontsize=8.5)
+    handles, labels = axes2d.flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper right", bbox_to_anchor=(0.98, 0.99),
+               frameon=False, fontsize=9, labelcolor=ink_secondary, ncol=3)
 
-    fig.text(0.06, 0.965, f"Portfolio weights over time - {fund_name} fund", color=ink_primary,
-              fontsize=13, ha="left", va="top")
-    fig.text(0.06, 0.91, f"Top {top_n} holdings by average weight, one panel per ticker, same "
-                         f"scale (the remaining {w.shape[1] - top_n} names average "
-                         f"{other_share:.0f}% combined)",
+    fig.text(0.06, 0.965, f"Portfolio weights over time, across methods - {universe} funds",
+              color=ink_primary, fontsize=13, ha="left", va="top")
+    fig.text(0.06, 0.91, "The tickers where Min-Variance, Max-Sharpe, and Risk-Parity disagree "
+                         "most about how much weight to hold, one panel per ticker, same scale",
               color=ink_secondary, fontsize=9, ha="left", va="top")
 
     fig.savefig(RESULTS / "figures" / "weights_over_time.png", dpi=150, facecolor=surface)
@@ -385,7 +395,7 @@ def main():
     print("building figures...")
     growth_figure(funds)
     drawdown_figure(funds, fund_name="Combined Max-Sharpe")
-    weights_over_time_figure(funds, fund_name="Equity Min-Variance")
+    weights_over_time_figure(funds, universe="Equity")
     sharpe_barplot_figure(perf_table)
     sentiment_index_figure(sector_index)
     fusion_comparison(funds, fused_name, perf_table)

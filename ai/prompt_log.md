@@ -368,10 +368,8 @@ best practice, since both lectures turned out to describe problems that
 matched my own results almost exactly.
 
 ## Prompt(s)
-- Attached 8 lecture PDFs and asked: "在阅读完这些文件之后，你对这个report
-  有没有新的看法，或者你觉得什么地方可以改进" (after reading these, do you
-  have new views on the report, or see anything to improve).
-- "好的你给我改吧" (go ahead and make the changes) - approved implementing
+- after reading these, do you see anything to improve.
+- approved implementing
   the three concrete things identified: standardising the sentiment index,
   adding finVADER, and updating the report's explanations/citations.
 
@@ -426,3 +424,57 @@ the fusion result slightly (Sharpe 0.581 with plain VADER before this
 change, 0.584 with finVADER now) and re-verifying the full pipeline still
 runs end to end and check_handin.py still passes (22 checks, only the
 pycache-cleanup reminder left) before treating this as done.
+
+---
+
+# Prompt log - fixing the weights-over-time exhibit to actually compare methods
+
+## What I wanted
+Fix a compliance gap flagged against the brief's own wording, not a style
+complaint: the brief requires "A portfolio-weights-over-time figure
+ACROSS METHODS for at least one fund" (Section 5's required exhibits list),
+but the existing figure compared the top 8 holdings within a single
+method (Equity Min-Variance) - it never showed more than one method, so
+it did not answer what the brief actually asked for.
+
+## Prompt(s)
+- Pasted a review comment (from a checklist/review pass) pointing out
+  exactly this: "题目要求的是...across methods...你现在的Figure 3只展示
+  Equity Min-Variance fund, top 8 holdings...也就是只展示了一个方法，没有
+  体现'across methods'", with a suggested fix (small multiples per ticker,
+  each panel comparing the three methods).
+
+## What the assistant produced
+Verified the brief's exact wording first (PROJECT_BRIEF.md line 160)
+rather than taking the feedback on faith, then rebuilt
+weights_over_time_figure(): instead of small multiples of the top 8
+holdings under one method, it is now small multiples of 6 tickers - the
+ones where Min-Variance, Max-Sharpe, and Risk-Parity disagree most (by
+max-minus-min average weight across the three methods) - with each panel
+overlaying all three methods' weight for that one ticker as three
+coloured lines, plus a shared legend.
+
+## What was wrong or risky
+This was a real requirement I had misread earlier and nobody, including
+me, caught it until a later review pass. Comparing holdings within one
+method and comparing methods for one holding look superficially similar
+(both are "weights over time" charts) but answer different questions, and
+only the second is what was actually asked for - a reminder that
+"produces a plausible-looking chart" is not the same bar as "answers the
+brief's actual exhibit requirement," and I should check exhibit wording
+against the brief text directly rather than trusting my own memory of
+what it said.
+
+## What I changed and why
+Picked tickers by cross-method disagreement (spread = max weight across
+methods - min weight across methods) specifically because a ticker all
+three methods treat identically has nothing to show in an "across
+methods" comparison - the resulting panels (WMT, GE, MRK, PSA, KO, EA)
+show genuinely different stories per method: Min-Variance favours WMT
+consistently while Max-Sharpe mostly ignores it; Max-Sharpe concentrates
+heavily into GE and MRK at points (up to ~50-65%) while the other two
+methods barely hold them; PSA gets a large Max-Sharpe allocation for about
+a year in 2021-2022 that both other methods never give it, then goes to
+zero. Re-ran the full pipeline and check_handin.py (22 checks, only the
+pycache reminder) to confirm nothing else broke from the signature change
+(fund_name= -> universe=).
