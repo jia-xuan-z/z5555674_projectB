@@ -723,7 +723,8 @@ with against my own already-validated palette, and one (sector renaming)
 needed checking against the actual data before acting on it.
 
 ## Prompt(s)
-- Pasted an 11-point review: (1) don't call it "greedy/fearful" since this
+- for sentiment_index.png, here are my suggestions, how do you think of them which is acceptable and which is not?
+- (1) don't call it "greedy/fearful" since this
   measures headline sentiment, not a Fear & Greed-style investor-
   psychology index; (2) shorten the subtitle; (3) rename sectors to full
   GICS names (Communication Services, Consumer Discretionary/Staples,
