@@ -299,6 +299,17 @@ def sharpe_barplot_figure(perf_table: pd.DataFrame):
     plt.close(fig)
 
 
+SECTOR_DISPLAY_NAMES = {
+    "Comm": "Communication Services", "RealEstate": "Real Estate", "Tech": "Information Technology",
+}
+# GICS order, with Consumer left as one merged label - the course's "Consumer"
+# sector mixes Discretionary names (DIS, NKE, SBUX) and Staples names (WMT, KO),
+# so relabelling it as either official GICS sector would misstate the data; the
+# report text notes the merge instead of the chart pretending it's pure GICS.
+SECTOR_ORDER = ["Comm", "Consumer", "Energy", "Financials", "Healthcare", "Industrials",
+                "Tech", "Materials", "RealEstate", "Utilities"]
+
+
 def sentiment_index_figure(sector_index: pd.DataFrame):
     # 10 sectors as overlapping lines is a rainbow spaghetti chart - no single
     # sector is traceable and the legend does more work than the plot. Small
@@ -309,45 +320,65 @@ def sentiment_index_figure(sector_index: pd.DataFrame):
     # Plots the STANDARDISED index (z-score against each sector's own mean/
     # std), not the raw finVADER average: headlines are mildly positive on
     # average (as the course's own fear-and-greed index finds - raw scores
-    # read "greedy" on ~94% of days), so a raw index would sit above its
-    # zero line almost every day and never distinguish a relatively fearful
-    # day from a normal one. Standardising is what makes "relatively more
-    # fearful/greedy than usual for this sector" readable at all.
+    # read positive on ~94% of days), so a raw index would sit above its zero
+    # line almost every day and never distinguish an unusual day from a
+    # normal one. Standardising is what makes "more positive/negative than
+    # usual for THIS sector" readable - it does NOT make sectors comparable
+    # to each other in absolute terms (a caption note says so explicitly),
+    # since each is standardised against its own history, not a shared one.
+    # Deliberately not called a "fear and greed" index and not labelled
+    # greedy/fearful: this measures headline sentiment tone, not investor
+    # psychology, which the course's own fear-and-greed lecture treats as a
+    # related but distinct construct built from different inputs.
     surface, ink_primary, ink_secondary, ink_muted = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
     gridline, baseline, blue, red = "#e1e0d9", "#c3c2b7", "#2a78d6", "#e34948"
 
-    sectors = sorted(sector_index["sector"].unique())
+    sectors = [s for s in SECTOR_ORDER if s in sector_index["sector"].unique()]
     smoothed_all = sector_index.groupby("sector")["sentiment_index_z"].transform(
         lambda s: s.rolling(21, min_periods=5).mean())
     y_max = max(abs(smoothed_all.min()), abs(smoothed_all.max())) * 1.1
+    year_ticks = pd.date_range("2020-01-01", "2024-01-01", freq="YS")
 
-    fig, axes = plt.subplots(2, 5, figsize=(12, 5.2), sharex=True, sharey=True)
+    fig, axes = plt.subplots(2, 5, figsize=(12, 5.4), sharex=True, sharey=True)
     fig.patch.set_facecolor(surface)
-    fig.subplots_adjust(top=0.85, bottom=0.11, left=0.06, right=0.98, hspace=0.45, wspace=0.12)
+    fig.subplots_adjust(top=0.82, bottom=0.15, left=0.055, right=0.98, hspace=0.4, wspace=0.1)
 
-    for ax, sector in zip(axes.flat, sectors):
+    for i, (ax, sector) in enumerate(zip(axes.flat, sectors)):
         g = sector_index.loc[sector_index["sector"] == sector].sort_values("date")
         smoothed = g["sentiment_index_z"].rolling(21, min_periods=5).mean()
         ax.set_facecolor(surface)
-        ax.axhline(0, color=baseline, linewidth=0.8, zorder=1)
-        ax.fill_between(g["date"], smoothed, 0, where=(smoothed >= 0), color=blue, alpha=0.5, linewidth=0, zorder=1)
-        ax.fill_between(g["date"], smoothed, 0, where=(smoothed < 0), color=red, alpha=0.5, linewidth=0, zorder=1)
-        ax.plot(g["date"], smoothed, color=ink_secondary, linewidth=0.8, zorder=2)
+        ax.fill_between(g["date"], smoothed, 0, where=(smoothed >= 0), color=blue, alpha=0.35, linewidth=0, zorder=1)
+        ax.fill_between(g["date"], smoothed, 0, where=(smoothed < 0), color=red, alpha=0.35, linewidth=0, zorder=1)
+        ax.plot(g["date"], smoothed, color=ink_secondary, linewidth=0.7, zorder=2)
+        ax.axhline(0, color=ink_muted, linewidth=1.2, alpha=0.8, zorder=3)
         ax.set_ylim(-y_max, y_max)
-        ax.set_title(sector, fontsize=10, color=ink_primary, loc="left", pad=4)
+        ax.set_xlim(pd.Timestamp("2020-01-01"), pd.Timestamp("2024-01-01"))
+        ax.set_xticks(year_ticks)
+        ax.set_title(SECTOR_DISPLAY_NAMES.get(sector, sector), fontsize=10, color=ink_primary, loc="left", pad=4)
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
         for spine in ("left", "bottom"):
             ax.spines[spine].set_color(baseline)
         ax.grid(axis="y", color=gridline, linewidth=0.6, zorder=0)
         ax.set_axisbelow(True)
-        ax.tick_params(colors=ink_muted, labelsize=7)
-        ax.tick_params(axis="x", rotation=45)
+        ax.tick_params(colors=ink_muted, labelsize=7.5)
+        if i < 5:
+            ax.tick_params(axis="x", labelbottom=False)
+        else:
+            ax.tick_params(axis="x", rotation=0)
+            ax.set_xticklabels([d.strftime("%Y") for d in year_ticks])
+        if i % 5 != 0:
+            ax.tick_params(axis="y", labelleft=False)
 
-    fig.text(0.06, 0.965, "Sector news-sentiment index (standardised)", color=ink_primary, fontsize=13, ha="left", va="top")
-    fig.text(0.06, 0.925, "21-trading-day rolling mean of the sentiment z-score (finVADER, relative to each "
-                          "sector's own 2020-2023 mean/std); blue = relatively greedy, red = relatively fearful",
+    fig.text(0.055, 0.965, "Standardised Sector News Sentiment, 2020-2023", color=ink_primary, fontsize=13.5, ha="left", va="top")
+    fig.text(0.055, 0.925, "21-day rolling average of sector-level finVADER sentiment z-scores. "
+                           "Blue = above-average sentiment; red = below-average sentiment",
               color=ink_secondary, fontsize=9, ha="left", va="top")
+    fig.text(0.055, 0.035, "Each sector is standardised against its own 2020-2023 mean/std - values are "
+                           "comparable as deviations from a sector's own norm, not as sentiment levels across sectors.",
+              color=ink_muted, fontsize=7.5, ha="left", va="bottom")
+    fig.text(0.055, 0.005, "\"Consumer\" merges Discretionary and Staples tickers (see text).",
+              color=ink_muted, fontsize=7.5, ha="left", va="bottom")
 
     fig.savefig(RESULTS / "figures" / "sentiment_index.png", dpi=150, facecolor=surface)
     plt.close(fig)

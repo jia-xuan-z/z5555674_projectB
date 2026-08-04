@@ -638,9 +638,9 @@ added to performance_metrics.csv, window/rebalance are pipeline
 constants).
 
 ## Prompt(s)
-- Pasted a review comment: current app covers the full investor journey
+- current app covers the full investor journey
   (compare/fact sheet/allocation/sentiment) but as an investment product
-  should add short disclosures (backtested != actual performance, past
+  should add short disclosures (backtested performance is not actual performance, past
   performance doesn't guarantee future results, costs/taxes/fees
   excluded, crypto materially riskier, sentiment is headline-only) and
   extra fact-sheet fields (first live backtest date, estimation window,
@@ -689,11 +689,7 @@ etc.) - inconsistent formatting in a table meant for a non-technical
 investor reader.
 
 ## Prompt(s)
-- Shared a screenshot of the rebooted, live app and asked "长成这样是对的
-  吗" (does it look right like this) - the deployed app was functioning
-  correctly (right numbers, disclosures present), but I noticed the
-  formatting inconsistency myself while reviewing the screenshot and
-  flagged and fixed it without being explicitly asked to.
+- The names of these four newly added column headers are still the original code variable names (with underscore-based naming conventions like “avg_turnover”), which don't match the formatted column names next to them, such as “Ann. return (%)” and “Sharpe.” They look a bit out of place. can you fix this
 
 ## What the assistant produced
 In streamlit_app.py: scaled avg_turnover and latest_max_weight to
@@ -715,3 +711,61 @@ effective holdings, matching the raw numbers already verified earlier).
 Purely cosmetic/readability - no underlying data changed. The point was
 consistency: a reader scanning the table should not hit a wall of
 unlabelled snake_case columns partway through an otherwise clean table.
+
+---
+
+# Prompt log - sentiment index figure: terminology, labelling, and readability pass
+
+## What I wanted
+Address an 11-point review of sentiment_index.png without accepting every
+point uncritically - some were real fixes, one (colour choice) I disagreed
+with against my own already-validated palette, and one (sector renaming)
+needed checking against the actual data before acting on it.
+
+## Prompt(s)
+- Pasted an 11-point review: (1) don't call it "greedy/fearful" since this
+  measures headline sentiment, not a Fear & Greed-style investor-
+  psychology index; (2) shorten the subtitle; (3) rename sectors to full
+  GICS names (Communication Services, Consumer Discretionary/Staples,
+  Real Estate, Information Technology), verifying which Consumer split
+  applies; (4)/(5) reduce axis-label crowding (date labels only on the
+  bottom row, y-labels only on the left column); (6) make the zero line
+  more prominent; (7) mute the fill colours and consider a colourblind-
+  safer blue/orange pair instead of blue/red; (8) order panels by GICS
+  sequence instead of alphabetical; (9) optional event markers (skippable
+  if short on space); (10) more direct title; (11) explicitly caption that
+  standardised z-scores are only comparable within a sector's own history,
+  not as absolute levels across sectors.
+
+## What the assistant produced
+Gave my own assessment of each point before changing anything, agreeing
+with 1/2/4/5/6/8/10/11, checking point 3 against context/DATA_GUIDE.md
+before acting (Comm/RealEstate/Tech map 1:1 to GICS names, but "Consumer"
+mixes Discretionary tickers - DIS, NKE, SBUX - with Staples tickers - WMT,
+KO - so relabelling it as either specific GICS sector would misstate the
+data; kept "Consumer" and added a caption note about the merge instead),
+skipped point 9 (event markers) as agreed-optional, and pushed back on
+half of point 7: kept the blue/red diverging pair since it is the
+validated diverging pair from the colour system already used consistently
+elsewhere in this report (blue/orange is a categorical, not diverging,
+pairing in that system), but did reduce fill opacity as suggested.
+Rebuilt sentiment_index_figure() with all the agreed changes: renamed
+sector titles, GICS-ordered panels, date ticks only on the bottom row
+(yearly, not rotated), value ticks only on the left column, a thicker/more
+opaque zero line, lower fill alpha, a shorter title/subtitle, and a
+two-line footnote (the standardisation caveat and the Consumer-merge note,
+split onto two lines after the first version overflowed the figure width).
+
+## What was wrong or risky
+The first version of the added footnote text was too long for the figure
+width at the given font size and got silently truncated off the right
+edge - caught by looking at the actual rendered PNG rather than assuming
+the fig.text() call worked because it didn't error. Fixed by splitting
+into two shorter fig.text() calls and increasing the bottom margin to fit
+both lines.
+
+## What I changed and why
+Every change here is presentation/labelling only - no underlying sentiment
+data, scores, or index values changed. Re-ran the full pipeline and
+check_handin.py (22 checks) to confirm nothing else broke from the
+function rewrite.
