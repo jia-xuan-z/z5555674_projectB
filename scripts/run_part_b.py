@@ -486,16 +486,14 @@ def table_images():
     main.columns = ["Fund", "Ann. return", "Ann. vol.", "Sharpe", "Max DD", "Effective N"]
     save_table_image(main, "table1_performance_metrics.png",
                       "Table 1. Out-of-sample performance and latest effective number of holdings",
-                      "Equity/Combined annualised with 252 days; Crypto with 365. "
-                      "Source: results/tables/performance_metrics.csv")
+                      "Equity/Combined annualised with 252 days; Crypto with 365")
 
     vf = pd.read_csv(RESULTS / "tables" / "vader_vs_finvader.csv")
     vf["mean_sentiment"] = vf["mean_sentiment"].round(3)
     vf["pct_exact_zero"] = (vf["pct_exact_zero"] * 100).round(1).astype(str) + "%"
     vf.columns = ["Model", "Mean ticker-day sentiment", "Exact-zero observations"]
     save_table_image(vf, "table2_vader_vs_finvader.png",
-                      "Table 2. Standard VADER versus finVADER validation comparison",
-                      "Source: results/tables/vader_vs_finvader.csv")
+                      "Table 2. Standard VADER versus finVADER validation comparison")
 
     fc = pd.read_csv(RESULTS / "tables" / "fusion_comparison.csv")
     fc_disp = fc[["fund", "annualised_return", "annualised_volatility", "sharpe_ratio",
@@ -509,8 +507,7 @@ def table_images():
     fc_disp["fund"] = ["Equity Max-Sharpe", "+ Sentiment tilt"]
     fc_disp.columns = ["Fund", "Return", "Vol.", "Sharpe", "Max DD", "Turnover", "Effective N"]
     save_table_image(fc_disp, "table3_fusion_comparison.png",
-                      "Table 3. Equity Max-Sharpe before and after the 0.50 sentiment tilt",
-                      "Source: results/tables/fusion_comparison.csv")
+                      "Table 3. Equity Max-Sharpe before and after the 0.50 sentiment tilt")
 
     fr = pd.read_csv(RESULTS / "tables" / "fusion_robustness.csv")
     fr["annualised_return"] = (fr["annualised_return"] * 100).round(2).astype(str) + "%"
@@ -521,8 +518,7 @@ def table_images():
     fr["tilt_strength"] = fr["tilt_strength"].map(lambda x: f"{x:.2f}")
     fr.columns = ["Tilt k", "Ann. return", "Ann. vol.", "Sharpe", "Max DD", "Turnover"]
     save_table_image(fr, "table4_fusion_robustness.png",
-                      "Table 4. Pre-specified sentiment-tilt robustness test",
-                      "Source: results/tables/fusion_robustness.csv")
+                      "Table 4. Pre-specified sentiment-tilt robustness test")
 
     full = perf.copy()
     for c in ["annualised_return", "annualised_volatility", "max_drawdown", "avg_turnover", "latest_max_weight"]:
@@ -535,8 +531,7 @@ def table_images():
                  "periods_per_year"]]
     full.columns = ["Fund", "Return", "Vol.", "Sharpe", "Max DD", "Turnover", "Max wt.", "HHI", "Eff. N", "Ann."]
     save_table_image(full, "tableB1_full_diagnostics.png",
-                      "Table B1. Full performance metrics, including implementation and concentration diagnostics",
-                      "Source: results/tables/performance_metrics.csv")
+                      "Table B1. Full performance metrics, including implementation and concentration diagnostics")
 
     print("saved 5 table images to results/tables/")
 
