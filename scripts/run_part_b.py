@@ -497,15 +497,16 @@ def table_images():
 
     fc = pd.read_csv(RESULTS / "tables" / "fusion_comparison.csv")
     fc_disp = fc[["fund", "annualised_return", "annualised_volatility", "sharpe_ratio",
-                  "max_drawdown", "avg_turnover", "effective_n_holdings"]].copy()
+                  "max_drawdown", "avg_turnover", "latest_max_weight", "effective_n_holdings"]].copy()
     fc_disp["annualised_return"] = (fc_disp["annualised_return"] * 100).round(2).astype(str) + "%"
     fc_disp["annualised_volatility"] = (fc_disp["annualised_volatility"] * 100).round(2).astype(str) + "%"
     fc_disp["max_drawdown"] = (fc_disp["max_drawdown"] * 100).round(2).astype(str) + "%"
     fc_disp["avg_turnover"] = (fc_disp["avg_turnover"] * 100).round(1).astype(str) + "%"
+    fc_disp["latest_max_weight"] = (fc_disp["latest_max_weight"] * 100).round(1).astype(str) + "%"
     fc_disp["sharpe_ratio"] = fc_disp["sharpe_ratio"].round(3)
     fc_disp["effective_n_holdings"] = fc_disp["effective_n_holdings"].round(2)
     fc_disp["fund"] = ["Equity Max-Sharpe", "+ Sentiment tilt"]
-    fc_disp.columns = ["Fund", "Return", "Vol.", "Sharpe", "Max DD", "Turnover", "Effective N"]
+    fc_disp.columns = ["Fund", "Return", "Vol.", "Sharpe", "Max DD", "Turnover", "Max wt.", "Effective N"]
     save_table_image(fc_disp, "table3_fusion_comparison.png",
                       "Table 3. Equity Max-Sharpe before and after the 0.50 sentiment tilt")
 
