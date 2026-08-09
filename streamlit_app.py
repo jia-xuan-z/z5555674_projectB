@@ -19,7 +19,75 @@ import streamlit as st
 
 RESULTS = pathlib.Path(__file__).resolve().parent / "results"
 
-st.set_page_config(page_title="SentiFolio", layout="wide")
+st.set_page_config(page_title="SentiFolio", page_icon="📊", layout="wide")
+
+# Presentation only - no data or metric logic below this point depends on it.
+st.markdown(
+    """
+    <style>
+    .block-container { padding-top: 2rem; }
+
+    .senti-header {
+        padding: 1.15rem 1.5rem;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #0F2942 0%, #1B4F72 100%);
+        margin-bottom: 1.3rem;
+    }
+    .senti-header h1 {
+        margin: 0; color: #FFFFFF; font-size: 2.0rem;
+    }
+    .senti-header p {
+        margin: 0.3rem 0 0 0; color: #D7E3EC; font-size: 0.95rem;
+    }
+
+    div[data-testid="stMetric"] {
+        background-color: #F4F6F8;
+        border: 1px solid rgba(15, 41, 66, 0.12);
+        border-radius: 10px;
+        padding: 0.9rem 1.1rem 0.7rem 1.1rem;
+        box-shadow: 0 1px 2px rgba(15, 41, 66, 0.06);
+    }
+    div[data-testid="stMetricLabel"] p {
+        font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase;
+        font-size: 0.72rem; opacity: 0.7;
+    }
+    div[data-testid="stMetricValue"] {
+        font-weight: 700; color: #0F2942;
+    }
+
+    div[data-testid="stExpander"] {
+        border: 1px solid rgba(15, 41, 66, 0.12);
+        border-radius: 10px;
+    }
+
+    .stTabs [data-baseweb="tab-list"] { gap: 1.6rem; }
+    .stTabs [data-baseweb="tab"] { font-weight: 600; }
+
+    h3 { margin-top: 1.4rem; }
+
+    /* KPI rows: every st.columns(4) metric row on this page follows the same
+       return / volatility / Sharpe / drawdown order, so a fixed left-accent
+       colour per column position reads as reward (blue), risk-adjusted
+       reward (green), and downside risk (red) without touching any values. */
+    div[data-testid="stHorizontalBlock"] div[data-testid="stMetric"] {
+        border-left: 4px solid #1B4F72;
+    }
+    div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-of-type(3)
+        div[data-testid="stMetric"] { border-left-color: #1E8449; }
+    div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-of-type(4)
+        div[data-testid="stMetric"] { border-left-color: #C0392B; }
+
+    div[data-testid="stDataFrame"] {
+        border: 1px solid rgba(15, 41, 66, 0.10);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    hr { border-top: 1px solid rgba(15, 41, 66, 0.12); margin: 1.6rem 0; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 @st.cache_data(ttl=86_400, show_spinner="Loading fund results...")
@@ -60,8 +128,12 @@ def current_holdings(fund_name: str, top_n: int = 10) -> pd.DataFrame:
     return latest.rename(columns={"weight": "weight (%)"}), last_date
 
 
-st.title("SentiFolio")
-st.caption("Systematically managed equity, crypto, and combined funds, with a news-sentiment index across equity sectors.")
+st.markdown(
+    '<div class="senti-header"><h1>SentiFolio</h1>'
+    "<p>Systematically managed equity, crypto, and combined funds, "
+    "with a news-sentiment index across equity sectors.</p></div>",
+    unsafe_allow_html=True,
+)
 
 with st.expander("Important disclosures"):
     st.markdown(
@@ -77,7 +149,7 @@ with st.expander("Important disclosures"):
 tab_funds, tab_sentiment, tab_allocate = st.tabs(["Funds", "Sentiment", "Build a portfolio"])
 
 with tab_funds:
-    st.subheader("Compare funds")
+    st.subheader("📊 Compare funds")
     perf_display = performance.copy()
     perf_display["annualised_return"] = (perf_display["annualised_return"] * 100).round(2)
     perf_display["annualised_volatility"] = (perf_display["annualised_volatility"] * 100).round(2)
@@ -93,11 +165,24 @@ with tab_funds:
         "periods_per_year": "Periods/yr", "avg_turnover": "Avg turnover (%)",
         "latest_max_weight": "Largest holding (%)", "effective_n_holdings": "Effective N holdings",
     })
-    st.dataframe(perf_display, width="stretch", hide_index=True)
+    # Colour is read-only sugar on top of the same numbers in the table: higher
+    # Sharpe shades greener, a deeper (more negative) drawdown shades redder.
+    # No value is changed, only how the existing figure is highlighted.
+    styled_perf = (
+        perf_display.style
+        .background_gradient(cmap="Greens", subset=["Sharpe"])
+        .background_gradient(cmap="Reds_r", subset=["Max drawdown (%)"])
+        .format({"Ann. return (%)": "{:.2f}", "Ann. vol (%)": "{:.2f}", "Sharpe": "{:.3f}",
+                  "Max drawdown (%)": "{:.2f}", "Avg turnover (%)": "{:.1f}",
+                  "Largest holding (%)": "{:.1f}", "Effective N holdings": "{:.1f}"})
+    )
+    st.dataframe(styled_perf, width="stretch", hide_index=True)
     st.caption("Avg turnover: mean one-way turnover per rebalance. Effective N holdings: 1/Herfindahl "
-               "index, computed from the most recent rebalance - lower means more concentrated.")
+               "index, computed from the most recent rebalance - lower means more concentrated. "
+               "Sharpe shading: greener = higher. Max drawdown shading: redder = deeper.")
 
-    st.subheader("Fund fact sheet")
+    st.divider()
+    st.subheader("🎯 Fund fact sheet")
     fund_choice = st.selectbox("Choose a fund", ALL_FUNDS, index=ALL_FUNDS.index("Combined Max-Sharpe")
                                 if "Combined Max-Sharpe" in ALL_FUNDS else 0)
 
@@ -133,7 +218,7 @@ with tab_funds:
     st.dataframe(holdings, width="stretch", hide_index=True)
 
 with tab_sentiment:
-    st.subheader("Sector news-sentiment index")
+    st.subheader("🗞️ Sector news-sentiment index")
     st.caption("Equal-weight finVADER sentiment across each sector's tickers, standardised against "
                "each sector's own history (z-score) so 0 = normal, positive = relatively greedy, "
                "negative = relatively fearful. 21-trading-day rolling mean. Lagged by at least one "
@@ -149,7 +234,7 @@ with tab_sentiment:
         st.info("Pick at least one sector.")
 
 with tab_allocate:
-    st.subheader("Build your own allocation")
+    st.subheader("🧮 Build your own allocation")
     st.caption("Set a weight per fund (must sum to 100%) and see the blended portfolio's out-of-sample performance.")
     default_pct = round(100 / len(ALL_FUNDS), 1)
     alloc = {}
