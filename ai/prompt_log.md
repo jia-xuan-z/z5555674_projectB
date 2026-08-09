@@ -1321,3 +1321,52 @@ report.docx) that every equation is valid OOXML math before treating any
 of it as done, not just that python-docx ran without raising an
 exception - a script completing without an error is not proof the XML
 it wrote is well-formed.
+
+
+---
+
+
+# Prompt log - custom theme and light styling for the app
+
+## What I wanted
+The app was still Streamlit's default look - no theme, no custom CSS.
+Wanted it to look less like a generic template, but explicitly scoped to
+presentation only: no data, no metric logic, no new features.
+
+## Prompt(s)
+-  improve the visual aesthetics of my app without modifying any numerical values; only the user‑interface appearance will be enhanced.
+
+## What the assistant produced
+First pass: a `[theme]` block in `.streamlit/config.toml` (navy/blue
+palette) plus CSS injected via `st.markdown(unsafe_allow_html=True)` in
+streamlit_app.py - a gradient header banner, card styling for st.metric,
+tab/expander styling. Second pass: colour-coded accent borders on every
+KPI card by column position (return/vol blue, Sharpe green, drawdown red
+- the same order everywhere `st.columns(4)` is used), a pandas Styler
+colour-gradient on the funds comparison table (greener Sharpe, redder
+drawdown), and small icons on each tab's subheader.
+
+## What was wrong or risky
+Before trusting `.style.background_gradient()` to work on the deployed
+app - not just locally, where extra packages may already happen to be
+installed - the assistant checked whether `jinja2` (which pandas' Styler
+needs) is actually guaranteed by requirements.txt, since neither
+streamlit nor pandas lists it as a direct dependency. Traced it with
+`importlib.metadata.requires()`: streamlit requires altair, and altair
+requires jinja2, so a plain `pip install -r requirements.txt` on a clean
+Streamlit Cloud container does pull it in transitively - checked rather
+than assumed from what happened to already be present locally.
+Separately, the assistant's own browser-preview tool could not screenshot
+the running app in this session (an environment issue, not an app bug),
+so the CSS was verified instead by reading back computed styles via
+injected JavaScript (border colours, background colours, the header's
+gradient) and by scanning the live page text for "Traceback"/"Error" -
+and I was still asked to look at the actual colour table myself before
+anything was pushed, since a colour choice isn't something a computed-
+style check can judge.
+
+## What I changed and why
+Presentation-only: `.streamlit/config.toml` and streamlit_app.py, nothing
+under src/ or results/. Confirmed with `git diff --stat` that no other
+file changed before committing. Pushed after I looked at the running app
+locally and confirmed it read well.
