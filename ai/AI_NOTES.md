@@ -52,7 +52,7 @@ The clearest case is the optimiser convergence bug described above - the
 assistant's first implementation of the walk-forward backtest silently
 produced equal-weight portfolios for min-variance and risk-parity funds most
 of the time, while reporting success. It was not caught by the assistant's
-own first-pass verification; it was caught because
+own first-pass verification. It was caught because
 a chart looked too clean to be real. A second case: an early version of the
 Streamlit allocation blend understated a fund's true performance by
 zero-filling dates before that fund existed.
