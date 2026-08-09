@@ -16,8 +16,22 @@ what came back rather than specifying every parameter up front.
 - Noticed a suspicious pattern in a generated chart (portfolio weights sitting
   at exactly equal-weight for months) and treated that as a signal to
   investigate rather than accept - this led to finding and fixing a real bug
-  where scipy's optimiser was silently failing to converge on ~150 of 333
-  rebalances across the min-variance and risk-parity funds.
+  where scipy's optimiser was silently failing to converge on 142 of 333
+  rebalances across the min-variance and risk-parity funds (111 risk-parity
+  + 31 equity min-variance; see src/portfolios.py's _OBJECTIVE_SCALE
+  comment for the exact breakdown).
+- Ran the same kind of check on mean-CVaR once it was added: an initial
+  SLSQP formulation (maximising a mean/CVaR ratio, mirroring max-Sharpe's
+  shape) failed to converge on 8 of 36 Equity rebalances, 2 of 39 Crypto,
+  and 13 of 36 Combined. Verified this by reconstructing the old weight
+  function in a standalone script and re-running it against the real
+  Equity/Crypto data (the Combined count was already in a code comment;
+  Equity and Crypto were not written down anywhere until this check), not
+  by trusting memory of the original interactive run - confirmed exact
+  reproduction (8/36, 2/39) before trusting the report's numbers. This
+  was the trigger for reformulating mean-CVaR as a linear program
+  (Rockafellar & Uryasev, 2000) instead of retuning the solver, since the
+  failure was a non-smooth-objective problem, not a scaling problem.
 - Cross-checked a Streamlit app calculation (blended portfolio allocation)
   against a fund's own reported metrics and caught a data-handling bug
   (zero-filling a fund's pre-launch dates) from the mismatch.

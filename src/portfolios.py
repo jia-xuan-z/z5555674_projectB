@@ -1,11 +1,28 @@
 """Station 3 - funds: optimal portfolios + out-of-sample backtest.
 
-Three long-only optimisation methods - minimum-variance, maximum-Sharpe
-(mean-variance tangency), and risk parity - each run as a walk-forward
-out-of-sample backtest: weights at a rebalance date are estimated from a
-trailing window of PAST returns only, then held fixed and applied to
-realised returns until the next rebalance. No look-ahead: the estimation
-window for a rebalance on date t covers [t-window, t), strictly before t.
+Five long-only optimisation methods - equal-weight, minimum-variance,
+maximum-Sharpe (mean-variance tangency), risk parity, and mean-CVaR - each
+run as a walk-forward out-of-sample backtest: weights at a rebalance date
+are estimated from a trailing window of PAST returns only, then held
+fixed and applied to realised returns until the next rebalance. No
+look-ahead: the estimation window for a rebalance on date t covers
+[t-window, t), strictly before t.
+
+Equal-weight uses neither mean nor covariance - it is the naive 1/N
+benchmark that DeMiguel, Garlappi & Uppal (2009) find is hard for
+"optimised" methods to beat out of sample. It is included precisely to
+let the report state whether the estimated methods actually add value
+over doing nothing clever, not only to compare them against each other.
+
+Mean-CVaR replaces max-Sharpe's volatility denominator with Conditional
+Value at Risk - the average loss in the worst tail of outcomes - so it
+targets tail risk directly rather than the whole distribution's spread
+(Rockafellar & Uryasev, 2000). Because CVaR is a sample quantile of
+realised portfolio returns, not a closed-form function of mean/cov like
+variance, its weight function additionally needs the raw estimation
+window of returns - every _*_weights() function below takes a `window`
+argument for a uniform dispatch signature, even though only mean-CVaR
+uses it.
 """
 from __future__ import annotations
 
@@ -13,7 +30,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-METHODS = ("min_variance", "max_sharpe", "risk_parity")
+METHODS = ("equal_weight", "min_variance", "max_sharpe", "risk_parity", "mean_cvar")
 
 
 def long_to_wide(returns: pd.DataFrame) -> pd.DataFrame:
@@ -35,7 +52,12 @@ _OBJECTIVE_SCALE = 1e4
 _SOLVER_OPTIONS = {"ftol": 1e-14, "maxiter": 500}
 
 
-def _min_variance_weights(mean: np.ndarray, cov: np.ndarray) -> tuple[np.ndarray, bool]:
+def _equal_weight_weights(mean: np.ndarray, cov: np.ndarray, window: pd.DataFrame) -> tuple[np.ndarray, bool]:
+    n = cov.shape[0]
+    return np.repeat(1 / n, n), True
+
+
+def _min_variance_weights(mean: np.ndarray, cov: np.ndarray, window: pd.DataFrame) -> tuple[np.ndarray, bool]:
     n = cov.shape[0]
     w0 = np.repeat(1 / n, n)
     bounds = [(0.0, 1.0)] * n
@@ -45,7 +67,7 @@ def _min_variance_weights(mean: np.ndarray, cov: np.ndarray) -> tuple[np.ndarray
     return (res.x if res.success else w0), res.success
 
 
-def _max_sharpe_weights(mean: np.ndarray, cov: np.ndarray, rf: float = 0.0) -> tuple[np.ndarray, bool]:
+def _max_sharpe_weights(mean: np.ndarray, cov: np.ndarray, window: pd.DataFrame, rf: float = 0.0) -> tuple[np.ndarray, bool]:
     n = cov.shape[0]
     w0 = np.repeat(1 / n, n)
     bounds = [(0.0, 1.0)] * n
@@ -64,7 +86,7 @@ def _max_sharpe_weights(mean: np.ndarray, cov: np.ndarray, rf: float = 0.0) -> t
     return (res.x if res.success else w0), res.success
 
 
-def _risk_parity_weights(mean: np.ndarray, cov: np.ndarray) -> tuple[np.ndarray, bool]:
+def _risk_parity_weights(mean: np.ndarray, cov: np.ndarray, window: pd.DataFrame) -> tuple[np.ndarray, bool]:
     n = cov.shape[0]
     w0 = np.repeat(1 / n, n)
     bounds = [(1e-6, 1.0)] * n
@@ -83,10 +105,75 @@ def _risk_parity_weights(mean: np.ndarray, cov: np.ndarray) -> tuple[np.ndarray,
     return (res.x if res.success else w0), res.success
 
 
+def _mean_cvar_weights(mean: np.ndarray, cov: np.ndarray, window: pd.DataFrame,
+                        alpha: float = 0.95) -> tuple[np.ndarray, bool]:
+    """Minimise CVaR at confidence alpha subject to a floor on expected
+    return - Rockafellar & Uryasev's (2000) linear-programming formulation,
+    solved exactly with HiGHS rather than as a black-box SLSQP objective.
+
+    A first version maximised (mean - rf) / CVaR with SLSQP, mirroring
+    max-Sharpe's shape - but CVaR is a sample quantile of w-dependent
+    scenario returns, not a smooth closed-form function of w like
+    variance is, and SLSQP (a smooth-gradient method) left up to 13 of 36
+    Combined-universe rebalances unconverged. CVaR minimisation subject to
+    linear constraints, by contrast, IS exactly representable as a linear
+    program via Rockafellar and Uryasev's auxiliary-variable trick, which
+    has no such convergence risk - reformulating the problem, not just
+    retuning the solver, is what actually fixes this (the same lesson as
+    the earlier SLSQP-scaling fix: check whether the solver can even solve
+    the problem as posed before trusting its reported status).
+
+    Variables: portfolio weights w (n), a VaR estimate zeta (1), and one
+    non-negative shortfall slack u_t per day in the window (T). The
+    objective zeta + mean(shortfall beyond zeta) / (1-alpha) equals CVaR_
+    alpha at the optimum. `target_return` (the mean constraint that makes
+    this "mean-CVaR" rather than plain minimum-CVaR) defaults to the
+    average individual asset's own estimated mean return in the window -
+    "do not give up more expected return than a typical single asset
+    would offer while minimising tail risk" - a principled floor, not an
+    arbitrary tuning knob.
+    """
+    from scipy.optimize import linprog
+
+    n = cov.shape[0]
+    R = window.to_numpy()
+    T = R.shape[0]
+    target_return = float(mean.mean())
+
+    n_vars = n + 1 + T
+    c = np.zeros(n_vars)
+    c[n] = 1.0
+    c[n + 1:] = 1.0 / ((1 - alpha) * T)
+
+    A_eq = np.zeros((1, n_vars))
+    A_eq[0, :n] = 1.0
+    b_eq = np.array([1.0])
+
+    A_ub = np.zeros((1 + T, n_vars))
+    b_ub = np.zeros(1 + T)
+    A_ub[0, :n] = -mean
+    b_ub[0] = -target_return
+    A_ub[1:, :n] = -R
+    A_ub[1:, n] = -1.0
+    A_ub[1:, n + 1:] = -np.eye(T)
+
+    bounds = [(0.0, 1.0)] * n + [(None, None)] + [(0.0, None)] * T
+
+    res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq,
+                   bounds=bounds, method="highs")
+    if not res.success:
+        return np.repeat(1 / n, n), False
+    w = np.clip(res.x[:n], 0.0, None)
+    total = w.sum()
+    return (w / total if total > 0 else np.repeat(1 / n, n)), True
+
+
 _WEIGHT_FUNCS = {
+    "equal_weight": _equal_weight_weights,
     "min_variance": _min_variance_weights,
     "max_sharpe": _max_sharpe_weights,
     "risk_parity": _risk_parity_weights,
+    "mean_cvar": _mean_cvar_weights,
 }
 
 
@@ -132,7 +219,7 @@ def oos_backtest(returns: pd.DataFrame, method: str = "min_variance",
 
         mean = est_window.mean().to_numpy()
         cov = est_window.cov().to_numpy()
-        w, converged = _WEIGHT_FUNCS[method](mean, cov)
+        w, converged = _WEIGHT_FUNCS[method](mean, cov, est_window)
         if not converged:
             n_failures += 1
         weights = pd.Series(w, index=valid_cols)
@@ -149,7 +236,7 @@ def oos_backtest(returns: pd.DataFrame, method: str = "min_variance",
     growth = (1 + daily_returns).cumprod()
 
     if n_failures:
-        print(f"  [warning] {method}: {n_failures}/{len(rebalance_dates)} rebalances did not converge (SLSQP)")
+        print(f"  [warning] {method}: {n_failures}/{len(rebalance_dates)} rebalances did not converge")
 
     return {
         "method": method,

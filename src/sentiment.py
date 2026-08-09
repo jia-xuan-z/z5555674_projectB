@@ -15,12 +15,48 @@ contribute nothing, and words that are ordinary accounting vocabulary
 (Loughran and McDonald, 2011). finVADER adds ~7,500 finance-specific terms
 on top of VADER's own lexicon and rules, so it is the model used for the
 headline scores that feed the sector index and the fusion tilt.
+
+A third "custom" model is a self-built lexicon extension (not finVADER's),
+added on top of plain VADER for direct comparison. Candidate finance terms
+were checked against the combined VADER+finVADER vocabulary (13,324 words)
+first, keeping only genuinely missing terms - several were missing
+asymmetrically (finVADER has "hawkish" but not "dovish", "headwind" but
+not "tailwind", "overbought" but not "oversold"). Each surviving candidate
+was then rated in two independent passes, thinking through how it is
+actually used in a financial-news headline; a term was kept only if both
+passes agreed in sign and were within 0.25 of each other on a -1..+1 scale,
+matching the brief's "have your AI agent rate them and keep the ones
+raters agree on" (Appendix, "Some Ideas - Unstructured Data"). Two of the
+13 candidates - "deleveraging" and "derisking" - failed this check (the two
+passes disagreed on sign, since both terms can read as prudent discipline
+or as a symptom of distress depending on context) and were dropped rather
+than resolved by picking whichever score looked better.
 """
 from __future__ import annotations
 
 import pandas as pd
 
-MODELS = ("finvader", "vader")
+MODELS = ("finvader", "vader", "custom")
+
+# Self-built extension: 11 finance terms absent from the combined VADER +
+# finVADER vocabulary, rated in two independent passes (see module
+# docstring) and kept only where both passes agreed. Scores are on VADER's
+# own raw lexicon scale (roughly -4..+4, e.g. "bad"=-2.5, "profit"=1.9),
+# not SentiBigNomics's -1..+1 scale, since this lexicon is merged directly
+# onto plain VADER, not onto finVADER's already-scaled terms.
+CUSTOM_LEXICON: dict[str, float] = {
+    "dovish": 1.5,
+    "tailwind": 1.4,
+    "oversold": 1.1,
+    "spinoff": 1.1,
+    "reshoring": 1.0,
+    "offshoring": -1.1,
+    "delisting": -2.3,
+    "layoffs": -2.2,
+    "overhang": -1.5,
+    "overvalued": -1.5,
+    "tapering": -1.75,
+}
 
 
 def _get_scorer(model: str):
@@ -36,14 +72,19 @@ def _get_scorer(model: str):
         from finvader.SentiBignomics import lexicon1
         from finvader.Henry import lexicon2
 
-        sentibignomics = {k: v * 0.1 for k, v in lexicon1().items()}
-        henry = lexicon2()
+        sentibignomics: dict[str, float] = {k: v * 0.1 for k, v in lexicon1().items()}
+        henry: dict[str, float] = lexicon2()
         sia = SentimentIntensityAnalyzer()
         sia.lexicon.update({**sentibignomics, **henry})
         return lambda text: sia.polarity_scores(text)["compound"]
     if model == "vader":
         from nltk.sentiment import SentimentIntensityAnalyzer
         sia = SentimentIntensityAnalyzer()
+        return lambda text: sia.polarity_scores(text)["compound"]
+    if model == "custom":
+        from nltk.sentiment import SentimentIntensityAnalyzer
+        sia = SentimentIntensityAnalyzer()
+        sia.lexicon.update(CUSTOM_LEXICON)
         return lambda text: sia.polarity_scores(text)["compound"]
     raise ValueError(f"unknown model {model!r}, choose from {MODELS}")
 

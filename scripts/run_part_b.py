@@ -23,7 +23,18 @@ RESULTS = ROOT / "results"
 WINDOW = 252
 UNIVERSES = ("Equity", "Crypto", "Combined")
 UNIVERSE_PERIODS = {"Equity": 252, "Crypto": 365, "Combined": 252}
-METHOD_LABELS = {"min_variance": "Min-Variance", "max_sharpe": "Max-Sharpe", "risk_parity": "Risk-Parity"}
+METHOD_LABELS = {"equal_weight": "Equal-Weight", "min_variance": "Min-Variance",
+                  "max_sharpe": "Max-Sharpe", "risk_parity": "Risk-Parity",
+                  "mean_cvar": "Mean-CVaR"}
+# The four ESTIMATED methods, i.e. excluding Equal-Weight - used for the
+# weights-over-time exhibit, which compares how methods that actually use
+# mean/covariance (or, for Mean-CVaR, mean plus the raw return sample)
+# disagree with each other. Equal-Weight is always exactly 1/N on every
+# ticker, so including it would not show disagreement between methods -
+# it would just show "how far is method X from a flat line", which is a
+# different (and already-covered, via the performance table) question
+# from what that figure answers.
+ESTIMATED_METHOD_LABELS = ("Min-Variance", "Max-Sharpe", "Risk-Parity", "Mean-CVaR")
 FUSION_BASE_FUND = "Equity Max-Sharpe"
 TILT_STRENGTH = 0.5
 
@@ -48,7 +59,9 @@ def build_universes():
 
 
 def build_funds(universe_returns: dict) -> dict:
-    """Run all (universe, method) backtests. Returns {fund_name: backtest_result}."""
+    """Run all (universe, method) backtests, including the Equal-Weight (1/N)
+    benchmark alongside the three estimated methods. Returns
+    {fund_name: backtest_result}."""
     funds = {}
     for universe in UNIVERSES:
         for method in portfolios.METHODS:
@@ -61,16 +74,24 @@ def build_funds(universe_returns: dict) -> dict:
 def build_sentiment(headline_panel: pd.DataFrame):
     """Score headlines with finVADER (VADER + finance lexicons) - see
     src/sentiment.py for why plain VADER under-covers finance vocabulary.
-    Also scores a plain-VADER pass for a documented before/after comparison
-    (innovation evidence), saved to results/tables/vader_vs_finvader.csv.
+    Also scores a plain-VADER pass and a self-built "custom" lexicon pass
+    (see src/sentiment.py's CUSTOM_LEXICON and its two-pass AI-rating
+    methodology) for a documented three-way comparison (innovation
+    evidence), saved to results/tables/vader_vs_finvader.csv. finVADER
+    stays the production model for the sector index and fusion tilt below,
+    since it is a validated, published extension (Koraub 2023) rather than
+    an 11-term lexicon rated only by this project's own two-pass check.
     """
     scores = sentiment.score_headlines(headline_panel, model="finvader")
     scores_vader = sentiment.score_headlines(headline_panel, model="vader")
+    scores_custom = sentiment.score_headlines(headline_panel, model="custom")
     comparison = pd.DataFrame([
         {"model": "VADER", "mean_sentiment": scores_vader["sentiment"].mean(),
          "pct_exact_zero": (scores_vader["sentiment"] == 0).mean()},
         {"model": "finVADER", "mean_sentiment": scores["sentiment"].mean(),
          "pct_exact_zero": (scores["sentiment"] == 0).mean()},
+        {"model": "Custom (VADER + self-built lexicon)", "mean_sentiment": scores_custom["sentiment"].mean(),
+         "pct_exact_zero": (scores_custom["sentiment"] == 0).mean()},
     ])
     comparison.to_csv(RESULTS / "tables" / "vader_vs_finvader.csv", index=False)
     print(comparison.to_string(index=False))
@@ -165,21 +186,23 @@ def save_performance_table(funds: dict) -> pd.DataFrame:
 
 
 def growth_figure(funds: dict):
-    # All 9 base funds on one shared linear axis crowds the plot, and
+    # All 15 base funds on one shared linear axis crowds the plot, and
     # crypto's much larger growth (up to ~10x) compresses equity/combined
     # (which stay under ~2x) into an unreadable band near the bottom - the
     # same "one dominant series drowns the rest" problem as the earlier
     # weights-over-time and sentiment-index redesigns, just in growth-of-$1
     # form. Splitting into one panel per universe, each with its OWN y-scale,
-    # fixes both: no more 9-way legend collision, and equity/combined get
+    # fixes both: no more 15-way legend collision, and equity/combined get
     # to use their own full vertical range instead of crypto's.
     surface, ink_primary, ink_secondary, ink_muted = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
     gridline, baseline = "#e1e0d9", "#c3c2b7"
-    method_colors = {"Min-Variance": "#2a78d6", "Max-Sharpe": "#eb6834", "Risk-Parity": "#1baf7a"}
+    method_colors = {"Equal-Weight": "#c9a227", "Min-Variance": "#2a78d6",
+                      "Max-Sharpe": "#eb6834", "Risk-Parity": "#1baf7a",
+                      "Mean-CVaR": "#8456b8"}
 
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4.6))
+    fig, axes = plt.subplots(1, 3, figsize=(12, 5.2))
     fig.patch.set_facecolor(surface)
-    fig.subplots_adjust(top=0.78, bottom=0.14, left=0.06, right=0.98, wspace=0.22)
+    fig.subplots_adjust(top=0.68, bottom=0.125, left=0.06, right=0.98, wspace=0.22)
 
     for ax, universe in zip(axes, UNIVERSES):
         ax.set_facecolor(surface)
@@ -197,14 +220,19 @@ def growth_figure(funds: dict):
         ax.tick_params(axis="x", rotation=30)
 
     axes[0].set_ylabel("Growth of $1", color=ink_secondary, fontsize=9.5)
+    # A 5-method legend sharing the title's row (the previous "upper right"
+    # placement) had no room to breathe and read as crowded, jammed against
+    # both the title text to its left and the panel titles below. Giving it
+    # a dedicated centred row of its own, below the subtitle, fixes both.
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper right", bbox_to_anchor=(0.98, 0.99),
-               frameon=False, fontsize=9.5, labelcolor=ink_secondary, ncol=3)
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.83),
+               frameon=False, fontsize=9.5, labelcolor=ink_secondary, ncol=5,
+               columnspacing=1.6, handlelength=1.6, handletextpad=0.6)
 
-    fig.text(0.06, 0.94, "Growth of $1, out-of-sample, by universe and method (2020-2023)",
+    fig.text(0.06, 0.96, "Growth of $1, out-of-sample, by universe and method (2020-2023)",
               color=ink_primary, fontsize=13, ha="left", va="top")
-    fig.text(0.06, 0.885, "Each panel has its own vertical scale - Crypto's growth is 3-5x "
-                          "larger than Equity/Combined, so a shared axis would flatten the latter two",
+    fig.text(0.06, 0.915, "Each panel has its own vertical scale - Crypto's growth is 3-5x "
+                        "larger than Equity/Combined, so a shared axis would flatten the latter two",
               color=ink_secondary, fontsize=9, ha="left", va="top")
 
     fig.savefig(RESULTS / "figures" / "growth_of_dollar.png", dpi=150, facecolor=surface)
@@ -233,23 +261,34 @@ def weights_over_time_figure(funds: dict, universe: str = "Equity", n_tickers: i
     # which does not answer that). Comparing methods only makes sense
     # ticker by ticker (one method's weight in isolation says nothing about
     # another method), so this is small multiples of TICKERS, each panel
-    # overlaying all three methods' weight for that one name - the panels
-    # are chosen as the tickers where the three methods disagree most (by
-    # max-minus-min average weight), since a ticker all three methods treat
-    # the same way has nothing to show.
+    # overlaying all four estimated methods' weight for that one name - the
+    # panels are chosen as the tickers where the four methods disagree most
+    # (by max-minus-min average weight), since a ticker all four methods
+    # treat the same way has nothing to show.
     surface, ink_primary, ink_secondary, ink_muted = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
     gridline, baseline = "#e1e0d9", "#c3c2b7"
-    method_colors = {"Min-Variance": "#2a78d6", "Max-Sharpe": "#eb6834", "Risk-Parity": "#1baf7a"}
+    method_colors = {"Min-Variance": "#2a78d6", "Max-Sharpe": "#eb6834", "Risk-Parity": "#1baf7a",
+                      "Mean-CVaR": "#8456b8"}
 
-    method_weights = {label: funds[f"{universe} {label}"]["weights"] * 100 for label in METHOD_LABELS.values()}
+    # Equal-Weight deliberately excluded here (see ESTIMATED_METHOD_LABELS) -
+    # it is always exactly 1/N on every ticker, so it would not show
+    # disagreement between methods, just distance from a flat line.
+    method_weights = {label: funds[f"{universe} {label}"]["weights"] * 100 for label in ESTIMATED_METHOD_LABELS}
     avg_by_method = pd.DataFrame({label: w.mean() for label, w in method_weights.items()})
     spread = avg_by_method.max(axis=1) - avg_by_method.min(axis=1)
     tickers = spread.sort_values(ascending=False).head(n_tickers).index.tolist()
-    y_max = max(w[tickers].max().max() for w in method_weights.values())
 
     ncols = 3
     nrows = -(-n_tickers // ncols)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(12, 3.2 * nrows), sharex=True, sharey=True)
+    # NOT sharey: a shared y-axis is exactly what this exhibit is FOR when
+    # one ticker sees a mild 3-way disagreement and another sees one method
+    # spike to 50-60% while the rest stay under 10% - the spike ticker's
+    # own range was forcing every other panel's lines flat near zero,
+    # hiding the very disagreement the panel exists to show. Each panel
+    # now scales to its own tickers' own range, the same fix already used
+    # in growth_figure() for the equivalent "one series drowns the rest"
+    # problem, one level up (universes there, tickers here).
+    fig, axes = plt.subplots(nrows, ncols, figsize=(12, 3.2 * nrows), sharex=True, sharey=False)
     fig.patch.set_facecolor(surface)
     fig.subplots_adjust(top=0.80, bottom=0.13, left=0.06, right=0.98, hspace=0.5, wspace=0.12)
 
@@ -257,7 +296,18 @@ def weights_over_time_figure(funds: dict, universe: str = "Equity", n_tickers: i
         ax.set_facecolor(surface)
         for label, w in method_weights.items():
             ax.plot(w.index, w[ticker].values, color=method_colors[label], linewidth=1.5, label=label, zorder=2)
-        ax.set_ylim(-y_max * 0.05, y_max * 1.08)
+        y_max_ticker = max(w[ticker].max() for w in method_weights.values())
+        # Per-panel y-limits (above) fix disagreement BETWEEN panels, but
+        # some single tickers (e.g. GE: three methods under ~10% all
+        # period, Max-Sharpe alone spiking to 50%+) have that same
+        # 50x-plus spread WITHIN one panel, which no linear y-limit can
+        # fix - the small lines are still pinned to the axis floor.
+        # symlog is linear near zero (so a genuine 0% weight, common here,
+        # still plots correctly - plain log cannot show 0 at all) and
+        # logarithmic beyond linthresh, which compresses the one large
+        # spike instead of letting it compress everything else.
+        ax.set_yscale("symlog", linthresh=2, linscale=1.0)
+        ax.set_ylim(-0.6, y_max_ticker * 1.3)
         ax.set_title(ticker, fontsize=10.5, color=ink_primary, loc="left", pad=4)
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
@@ -273,12 +323,15 @@ def weights_over_time_figure(funds: dict, universe: str = "Equity", n_tickers: i
         axes2d[row, 0].set_ylabel("Weight (%)", color=ink_secondary, fontsize=8.5)
     handles, labels = axes2d.flat[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper right", bbox_to_anchor=(0.98, 0.99),
-               frameon=False, fontsize=9, labelcolor=ink_secondary, ncol=3)
+               frameon=False, fontsize=9, labelcolor=ink_secondary, ncol=4)
 
     fig.text(0.06, 0.965, f"Portfolio weights over time, across methods - {universe} funds",
               color=ink_primary, fontsize=13, ha="left", va="top")
-    fig.text(0.06, 0.91, "The tickers where Min-Variance, Max-Sharpe, and Risk-Parity disagree "
-                         "most about how much weight to hold, one panel per ticker, same scale",
+    fig.text(0.06, 0.91, "The tickers where Min-Variance, Max-Sharpe, Risk-Parity, and Mean-CVaR "
+                         "disagree most about how much weight to hold.",
+              color=ink_secondary, fontsize=9, ha="left", va="top")
+    fig.text(0.06, 0.875, "Weight (y-axis) is symlog - linear below 2%, logarithmic above it - so "
+                          "one method's spike does not flatten every other line.",
               color=ink_secondary, fontsize=9, ha="left", va="top")
 
     fig.savefig(RESULTS / "figures" / "weights_over_time.png", dpi=150, facecolor=surface)
@@ -287,7 +340,7 @@ def weights_over_time_figure(funds: dict, universe: str = "Equity", n_tickers: i
 
 def sharpe_barplot_figure(perf_table: pd.DataFrame):
     plot_df = perf_table[~perf_table["fund"].str.endswith("Sentiment Tilt")].copy()
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(13, 5))
     colors = {"Equity": "#4C72B0", "Crypto": "#DD8452", "Combined": "#55A868"}
     bar_colors = [colors[f.split(" ")[0]] for f in plot_df["fund"]]
     ax.bar(plot_df["fund"], plot_df["sharpe_ratio"], color=bar_colors)
@@ -326,10 +379,15 @@ def sentiment_index_figure(sector_index: pd.DataFrame):
     # usual for THIS sector" readable - it does NOT make sectors comparable
     # to each other in absolute terms (a caption note says so explicitly),
     # since each is standardised against its own history, not a shared one.
-    # Deliberately not called a "fear and greed" index and not labelled
-    # greedy/fearful: this measures headline sentiment tone, not investor
-    # psychology, which the course's own fear-and-greed lecture treats as a
-    # related but distinct construct built from different inputs.
+    # Labelled as a fear-and-greed index, greedy/fearful: an earlier version
+    # of this docstring avoided that framing, reasoning the course's own
+    # fear-and-greed index was "a related but distinct construct built from
+    # different inputs" - checked directly against the week10 revision
+    # slides and that reasoning was wrong. The course's own fear-and-greed
+    # index is built from exactly this input (average finVADER headline
+    # sentiment, rescaled/standardised), just aggregated market-wide
+    # instead of per sector, so there is no reason to avoid the course's
+    # own terminology here.
     surface, ink_primary, ink_secondary, ink_muted = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
     gridline, baseline, blue, red = "#e1e0d9", "#c3c2b7", "#2a78d6", "#e34948"
 
@@ -339,45 +397,57 @@ def sentiment_index_figure(sector_index: pd.DataFrame):
     y_max = max(abs(smoothed_all.min()), abs(smoothed_all.max())) * 1.1
     year_ticks = pd.date_range("2020-01-01", "2024-01-01", freq="YS")
 
-    fig, axes = plt.subplots(2, 5, figsize=(12, 5.4), sharex=True, sharey=True)
+    # 5 rows x 2 cols, not 2 x 5: a Word page is ~6.3-6.5in of content width,
+    # and the earlier 13.5in-wide layout had to be shrunk by half to fit,
+    # taking every font size down with it until axis labels were unreadable
+    # on the printed page. Designing at the page's actual width instead -
+    # tall and narrow rather than short and wide - means the figure drops
+    # into a report page near its native size, no crushing shrink needed.
+    fig, axes = plt.subplots(5, 2, figsize=(6.6, 10.0), sharex=True, sharey=True)
     fig.patch.set_facecolor(surface)
-    fig.subplots_adjust(top=0.82, bottom=0.15, left=0.055, right=0.98, hspace=0.4, wspace=0.1)
+    fig.subplots_adjust(top=0.895, bottom=0.10, left=0.10, right=0.97, hspace=0.6, wspace=0.16)
 
+    n_rows = 5
     for i, (ax, sector) in enumerate(zip(axes.flat, sectors)):
         g = sector_index.loc[sector_index["sector"] == sector].sort_values("date")
         smoothed = g["sentiment_index_z"].rolling(21, min_periods=5).mean()
         ax.set_facecolor(surface)
-        ax.fill_between(g["date"], smoothed, 0, where=(smoothed >= 0), color=blue, alpha=0.35, linewidth=0, zorder=1)
-        ax.fill_between(g["date"], smoothed, 0, where=(smoothed < 0), color=red, alpha=0.35, linewidth=0, zorder=1)
-        ax.plot(g["date"], smoothed, color=ink_secondary, linewidth=0.7, zorder=2)
-        ax.axhline(0, color=ink_muted, linewidth=1.2, alpha=0.8, zorder=3)
+        # No dark outline on top of the fill: with 10 panels already competing
+        # for attention, a second (line) layer on top of the fill added visual
+        # noise without adding information - the fill colour alone carries the
+        # sign and the zero line anchors the reference point.
+        ax.fill_between(g["date"], smoothed, 0, where=(smoothed >= 0), color=blue, alpha=0.5, linewidth=0, zorder=1)
+        ax.fill_between(g["date"], smoothed, 0, where=(smoothed < 0), color=red, alpha=0.5, linewidth=0, zorder=1)
+        ax.axhline(0, color=ink_muted, linewidth=1, alpha=0.7, zorder=3)
         ax.set_ylim(-y_max, y_max)
         ax.set_xlim(pd.Timestamp("2020-01-01"), pd.Timestamp("2024-01-01"))
         ax.set_xticks(year_ticks)
-        ax.set_title(SECTOR_DISPLAY_NAMES.get(sector, sector), fontsize=10, color=ink_primary, loc="left", pad=4)
+        ax.set_title(SECTOR_DISPLAY_NAMES.get(sector, sector), fontsize=11, color=ink_primary, loc="left", pad=6)
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
         for spine in ("left", "bottom"):
             ax.spines[spine].set_color(baseline)
-        ax.grid(axis="y", color=gridline, linewidth=0.6, zorder=0)
+        ax.grid(axis="y", color=gridline, linewidth=0.5, zorder=0)
         ax.set_axisbelow(True)
-        ax.tick_params(colors=ink_muted, labelsize=7.5)
-        if i < 5:
+        ax.tick_params(colors=ink_muted, labelsize=8.5)
+        row, col = divmod(i, 2)
+        if row < n_rows - 1:
             ax.tick_params(axis="x", labelbottom=False)
         else:
             ax.tick_params(axis="x", rotation=0)
             ax.set_xticklabels([d.strftime("%Y") for d in year_ticks])
-        if i % 5 != 0:
+        if col != 0:
             ax.tick_params(axis="y", labelleft=False)
 
-    fig.text(0.055, 0.965, "Standardised Sector News Sentiment, 2020-2023", color=ink_primary, fontsize=13.5, ha="left", va="top")
-    fig.text(0.055, 0.925, "21-day rolling average of sector-level finVADER sentiment z-scores. "
-                           "Blue = above-average sentiment; red = below-average sentiment",
-              color=ink_secondary, fontsize=9, ha="left", va="top")
-    fig.text(0.055, 0.035, "Each sector is standardised against its own 2020-2023 mean/std - values are "
-                           "comparable as deviations from a sector's own norm, not as sentiment levels across sectors.",
+    fig.text(0.10, 0.975, "Sector Fear & Greed, from the News, 2020-2023", color=ink_primary, fontsize=14, ha="left", va="top")
+    fig.text(0.10, 0.948, "21-day rolling average of sector-level finVADER sentiment z-scores.",
+              color=ink_secondary, fontsize=9.5, ha="left", va="top")
+    fig.text(0.10, 0.928, "Blue = greedy (above-average sentiment); red = fearful (below-average sentiment).",
+              color=ink_secondary, fontsize=9.5, ha="left", va="top")
+    fig.text(0.10, 0.052, "Standardised against each sector's own history - not comparable "
+                          "across sectors in absolute terms.",
               color=ink_muted, fontsize=7.5, ha="left", va="bottom")
-    fig.text(0.055, 0.005, "\"Consumer\" merges Discretionary and Staples tickers (see text).",
+    fig.text(0.10, 0.022, "\"Consumer\" merges Discretionary and Staples tickers (see text).",
               color=ink_muted, fontsize=7.5, ha="left", va="bottom")
 
     fig.savefig(RESULTS / "figures" / "sentiment_index.png", dpi=150, facecolor=surface)
@@ -493,8 +563,17 @@ def table_images():
     vf["pct_exact_zero"] = (vf["pct_exact_zero"] * 100).round(1).astype(str) + "%"
     vf.columns = ["Model", "Mean ticker-day sentiment", "Exact-zero observations"]
     save_table_image(vf, "table2_vader_vs_finvader.png",
-                      "Table 2. Standard VADER versus finVADER validation comparison")
+                      "Table 2. VADER, finVADER, and a self-built lexicon extension",
+                      "finVADER stays the production model; Custom is a validated comparison, not a pipeline swap")
 
+    # The brief's required-exhibits list (Section 5) asks for the fusion
+    # before-vs-after comparison "as a table AND a figure" - the figure
+    # (fusion_comparison.png) already exists, but an earlier pass at this
+    # function dropped the table half, reasoning the same numbers already
+    # appear in Section 4.1's prose. Prose does not satisfy an explicit
+    # "as a table" requirement, so this table is required, not optional -
+    # restored as Table 3, with the robustness sweep renumbered to Table 4
+    # to make room for it.
     fc = pd.read_csv(RESULTS / "tables" / "fusion_comparison.csv")
     fc_disp = fc[["fund", "annualised_return", "annualised_volatility", "sharpe_ratio",
                   "max_drawdown", "avg_turnover", "latest_max_weight", "effective_n_holdings"]].copy()
@@ -531,8 +610,8 @@ def table_images():
                  "avg_turnover", "latest_max_weight", "herfindahl_index", "effective_n_holdings",
                  "periods_per_year"]]
     full.columns = ["Fund", "Return", "Vol.", "Sharpe", "Max DD", "Turnover", "Max wt.", "HHI", "Eff. N", "Ann."]
-    save_table_image(full, "tableB1_full_diagnostics.png",
-                      "Table B1. Full performance metrics, including implementation and concentration diagnostics")
+    save_table_image(full, "tableA1_full_diagnostics.png",
+                      "Table A1. Full performance metrics, including implementation and concentration diagnostics")
 
     print("saved 5 table images to results/tables/")
 
@@ -614,7 +693,7 @@ def main():
     print("loading and cleaning data...")
     data = build_universes()
 
-    print("building funds (9 base backtests: 3 universes x 3 methods)...")
+    print("building funds (15 base backtests: 3 universes x 5 methods)...")
     funds = build_funds(data)
 
     print("scoring sentiment...")
