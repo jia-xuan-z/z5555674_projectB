@@ -1,4 +1,6 @@
 # CLAUDE.md - SentiFolio Part B project instructions
+# Link to GitHub: https://github.com/jia-xuan-z/z5555674_projectB
+# Link to Streamlit: https://z5555674projectb-eppv6ytyyx2jducyw9luh2.streamlit.app/
 
 ## Project context
 
